@@ -10,6 +10,23 @@ from src.data_preprocessing.retinaface_utils import load_and_prepare_detector_re
     recognize_one_face_bbox, extract_face_according_bbox
 
 
+emo_categories:dict = {
+    0:"N",
+    1:"H",
+    2:"Sa",
+    3:"Su",
+    4:"F",
+    5:"D",
+    6:"A",
+    7:"C",
+}
+
+def change_labels_to_categories(df_with_labels:pd.DataFrame)->pd.DataFrame:
+    result_df = df_with_labels
+    result_df["category"] = result_df["category"].apply(lambda x: emo_categories[x])
+    return result_df
+
+
 
 
 def clear_df_with_subDirs_from_nonsense_labels(df_with_subDirs:pd.DataFrame)->pd.DataFrame:
@@ -24,6 +41,7 @@ def clear_df_with_subDirs_from_NaN(df_with_subDirs:pd.DataFrame)->pd.DataFrame:
     return df_with_subDirs
 
 def form_new_dataframe_using_original_one(original_df:pd.DataFrame, general_dir_with_data:str)->pd.DataFrame:
+    # TODO: can be rewritten in vectorized way
     result_df_with_labels = pd.DataFrame(columns=['abs_path', 'arousal', 'valence', "category"])
     for idx in range(original_df.shape[0]):
         filename = original_df.iloc[idx, 0]
@@ -57,7 +75,7 @@ def extract_faces_from_original_data(df_with_abs_paths:pd.DataFrame, output_path
         # change the filename to the created one
         result_df.iloc[idx, 0] = abs_output_path
 
-        if counter%1000==0: print(f"Processed {counter} images")
+        if counter%100==0: print(f"Processed {counter} images")
         counter+=1
 
     result_df.to_csv(os.path.join(output_path, labels_filename), index=False)
@@ -81,6 +99,9 @@ def main():
     # clear the dataframes from NaNs
     df_with_subDirs_train = clear_df_with_subDirs_from_NaN(df_with_subDirs_train)
     df_with_subDirs_dev = clear_df_with_subDirs_from_NaN(df_with_subDirs_dev)
+    # change the labels to categories
+    df_with_subDirs_train = change_labels_to_categories(df_with_subDirs_train)
+    df_with_subDirs_dev = change_labels_to_categories(df_with_subDirs_dev)
     # save the result
     df_with_subDirs_train.to_csv(os.path.join(output_path, "train_labels.csv"), index=False)
     df_with_subDirs_dev.to_csv(os.path.join(output_path, "dev_labels.csv"), index=False)
