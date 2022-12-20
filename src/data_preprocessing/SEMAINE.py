@@ -8,10 +8,10 @@ from src.data_preprocessing.RECOLA import load_labels, extract_faces_with_filena
 def main():
     # here we use the functions from the RECOLA.py file, since the preprocessing procedure is the same for SEMAINE as well
     # all we need is to modify paths to data, labels, and so on.
-    path_to_data = r"G:\Datasets\SEMAINE\original\SEMAINE_videos"
-    output_path = r"G:\Datasets\SEMAINE\preprocessed"
-    path_to_arousal_labels = r"G:\Datasets\SEMAINE\SEM_labels_arousal_100Hz_gold_shifted.csv"
-    path_to_valence_labels = r"G:\Datasets\SEMAINE\SEM_labels_valence_100Hz_gold_shifted.csv"
+    path_to_data = "/media/external_hdd_2/Datasets/SEMAINE/original/SEMAINE_videos"
+    output_path = "/media/external_hdd_2/Datasets/SEMAINE/preprocessed"
+    path_to_arousal_labels = "/media/external_hdd_2/Datasets/SEMAINE/SEM_labels_arousal_100Hz_gold_shifted.csv"
+    path_to_valence_labels = "/media/external_hdd_2/Datasets/SEMAINE/SEM_labels_valence_100Hz_gold_shifted.csv"
     # load arousal and valence labels
     arousal_labels = load_labels(path_to_arousal_labels)
     arousal_labels.columns = ["filename", "timestamp", "arousal"]
@@ -27,7 +27,7 @@ def main():
     # delete nan values from the metadata
     metadata = metadata.dropna()
     # save metadata
-    metadata.to_csv(os.path.join(r"G:\Datasets\SEMAINE", "preprocessed_labels.csv"), index=False)
+    metadata.to_csv(os.path.join("/media/external_hdd_2/Datasets/SEMAINE/preprocessed", "preprocessed_labels.csv"), index=False)
 
 
 
