@@ -64,20 +64,23 @@ def extract_faces_from_original_data(df_with_abs_paths:pd.DataFrame, output_path
         filename = result_df.iloc[idx, 0]
         # form absolute paths to images and faces to be extracted
         abs_output_path = os.path.join(output_path, *filename.split(os.path.sep)[-2:])
-        os.makedirs(os.path.dirname(abs_output_path), exist_ok=True)
-        # loading the image
-        img = np.array(Image.open(filename))
-        # recognize the face
-        bbox = recognize_one_face_bbox(img, detector)
-        # if not recognized, note it as NaN
-        if bbox is None:
-            abs_output_path = np.NaN
-        else:
-        # otherwise, extract the face and save it
-            face = extract_face_according_bbox(img, bbox)
-            Image.fromarray(face).save(abs_output_path)
-        # change the filename to the created one
-        result_df.iloc[idx, 0] = abs_output_path
+        try:
+            os.makedirs(os.path.dirname(abs_output_path), exist_ok=True)
+            # loading the image
+            img = np.array(Image.open(filename))
+            # recognize the face
+            bbox = recognize_one_face_bbox(img, detector)
+            # if not recognized, note it as NaN
+            if bbox is None:
+                abs_output_path = np.NaN
+            else:
+            # otherwise, extract the face and save it
+                face = extract_face_according_bbox(img, bbox)
+                Image.fromarray(face).save(abs_output_path)
+            # change the filename to the created one
+            result_df.iloc[idx, 0] = abs_output_path
+        except Exception as e:
+            print("During processing of file {} exception occured: {}".format(filename, e))
 
         if counter%100==0: print(f"Processed {counter} images")
         counter+=1
