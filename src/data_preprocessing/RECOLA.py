@@ -1,3 +1,7 @@
+import sys
+sys.path.extend(["/work/home/dsu/datatools/"])
+sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
+
 import glob
 import os
 from typing import Optional
