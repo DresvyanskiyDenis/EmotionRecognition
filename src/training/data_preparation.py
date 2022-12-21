@@ -16,6 +16,8 @@ from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_fa
     random_crop_image, random_posterize_image, random_adjust_sharpness_image, random_equalize_image, \
     random_horizontal_flip_image, random_vertical_flip_image
 
+import training_config
+build_in_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 
 
@@ -47,7 +49,8 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     test = pd.concat([filenames_dict[filename] for filename in test_filenames])
     return [train, dev, test]
 
-
+def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->dict:
+    pass
 
 
 
@@ -88,8 +91,6 @@ def load_all_dataframes():
 
     return (train, dev, test)
 
-# we need it to speed up the preprocessing pipeline
-build_in_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 def preprocess_image_DeiT(image:np.ndarray)->torch.Tensor:
     image = build_in_preprocessing_function(images=image, return_tensors="pt")['pixel_values']
@@ -99,7 +100,7 @@ def resize_image_to_224(image:np.ndarray)->np.ndarray:
     # TODO: implement it in a way you wanted: black colour to make the image not distorted, etc.
     pass
 
-def construct_data_loaders(train, dev, test, augment_prob:float=0.05, batch_size:int=32, num_workers:int=8)\
+def construct_data_loaders(train, dev, test, num_workers:int=8)\
         ->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
     """ # TODO: write a docstring
 
@@ -112,18 +113,18 @@ def construct_data_loaders(train, dev, test, augment_prob:float=0.05, batch_size
     :return:
     """
     augmentation_functions = {
-        pad_image_random_factor: augment_prob,
-        grayscale_image: augment_prob,
-        partial(collor_jitter_image_random, brightness=0.5, hue=0.3, contrast=0.3, saturation=0.3): augment_prob,
-        partial(gaussian_blur_image_random, kernel_size=(5, 9), sigma=(0.1, 5)): augment_prob,
-        random_perspective_image: augment_prob,
-        random_rotation_image: augment_prob,
-        partial(random_crop_image, cropping_factor_limits=(0.7, 0.9)): augment_prob,
-        random_posterize_image: augment_prob,
-        partial(random_adjust_sharpness_image, sharpness_factor_limits=(0.1, 3)): augment_prob,
-        random_equalize_image: augment_prob,
-        random_horizontal_flip_image: augment_prob,
-        random_vertical_flip_image: augment_prob
+        pad_image_random_factor: training_config.AUGMENT_PROB,
+        grayscale_image: training_config.AUGMENT_PROB,
+        partial(collor_jitter_image_random, brightness=0.5, hue=0.3, contrast=0.3, saturation=0.3): training_config.AUGMENT_PROB,
+        partial(gaussian_blur_image_random, kernel_size=(5, 9), sigma=(0.1, 5)): training_config.AUGMENT_PROB,
+        random_perspective_image: training_config.AUGMENT_PROB,
+        random_rotation_image: training_config.AUGMENT_PROB,
+        partial(random_crop_image, cropping_factor_limits=(0.7, 0.9)): training_config.AUGMENT_PROB,
+        random_posterize_image: training_config.AUGMENT_PROB,
+        partial(random_adjust_sharpness_image, sharpness_factor_limits=(0.1, 3)): training_config.AUGMENT_PROB,
+        random_equalize_image: training_config.AUGMENT_PROB,
+        random_horizontal_flip_image: training_config.AUGMENT_PROB,
+        random_vertical_flip_image: training_config.AUGMENT_PROB
     }
 
     preprocessing_functions=[
@@ -140,9 +141,9 @@ def construct_data_loaders(train, dev, test, augment_prob:float=0.05, batch_size
     test_data_loader = ImageDataLoader(paths_with_labels=test, preprocessing_functions=preprocessing_functions,
                     augmentation_functions=None, shuffle=False)
 
-    train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers)
-    dev_dataloader = DataLoader(dev_data_loader, batch_size=batch_size, num_workers=num_workers)
-    test_dataloader = DataLoader(test_data_loader, batch_size=batch_size, num_workers=num_workers)
+    train_dataloader = DataLoader(train_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
+    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
+    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 

@@ -3,7 +3,9 @@ from typing import Tuple, List, Optional
 import pandas as pd
 import numpy as np
 import torch
+from torch.nn.functional import one_hot
 
+import training_config
 
 def train_step(model:torch.nn.Module, optimizer:torch.optim.Optimizer, criterion:Tuple[torch.nn.Module,...],
                inputs:Tuple[torch.Tensor,...], ground_truths:List[torch.Tensor]) -> float:
@@ -40,7 +42,7 @@ def train_step(model:torch.nn.Module, optimizer:torch.optim.Optimizer, criterion
 
 
 def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoader,
-               optimizer:torch.optim.Optimizer, criterion:Tuple[torch.nn.Module,...],
+               optimizer:torch.optim.Optimizer, criterions:Tuple[torch.nn.Module,...],
                device:torch.device, print_step:int=100)->float:
     """ Performs one epoch of training for a model.
 
@@ -51,7 +53,7 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
             (thus, we have several outputs).
     :param optimizer: torch.optim.Optimizer
             Optimizer for training.
-    :param criterion: List[torch.nn.Module,...]
+    :param criterions: List[torch.nn.Module,...]
             Loss functions for each output of the model.
     :param device: torch.device
             Device to use for training.
@@ -70,10 +72,13 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
         inputs = inputs.float()
         inputs = inputs.to(device)
 
-        labels = [x.to(device) for x in labels]
+        # separate labels into a list of torch.Tensor
+        labels = [labels[:,0], labels[:,1], labels[:,2]]
+        labels[2] = one_hot(labels[2].long(), num_classes=training_config.NUM_CLASSES)
+        labels = [label.float().to(device) for label in labels]
 
         # do train step
-        step_loss = train_step(model, optimizer, criterion, inputs, labels)
+        step_loss = train_step(model, optimizer, criterions, inputs, labels)
 
 
         # print statistics
