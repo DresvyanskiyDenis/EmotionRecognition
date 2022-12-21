@@ -50,7 +50,8 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     return [train, dev, test]
 
 def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->dict:
-    pass
+    df['category'] = df['category'].apply(lambda x: emo_categories[x])
+    return df
 
 
 
@@ -82,7 +83,10 @@ def load_all_dataframes():
     SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages)
     # for the AffectNet we need to do a splitting separately, since it has no video, just a lot of images
     AffectNet_train = pd.read_csv(os.path.join(path_to_AffectNet, "train_labels.csv"))
+    AffectNet_train = transform_emo_categories_to_int(AffectNet_train, training_config.EMO_CATEGORIES)
     AffectNet_dev = pd.read_csv(os.path.join(path_to_AffectNet, "dev_labels.csv"))
+    AffectNet_dev = transform_emo_categories_to_int(AffectNet_dev, training_config.EMO_CATEGORIES)
+
 
     # concatenate all dataframes
     train = pd.concat([AFEW_VA_train, RECOLA_train, SEMAINE_train, SEWA_train, AffectNet_train])
