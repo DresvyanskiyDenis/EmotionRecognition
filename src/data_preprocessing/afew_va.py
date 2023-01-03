@@ -58,6 +58,8 @@ def main():
     labels = get_arousal_and_valence_all_videos(path_dir)
     # save labels for all videos as one dataframe
     labels_save_path = r'/media/external_hdd_1/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed'
+    if not os.path.exists(labels_save_path):
+        os.makedirs(labels_save_path)
     labels = pd.concat(list(labels.values()), axis=0)
     labels.to_csv(os.path.join(labels_save_path, 'labels.csv'), index=False)
 
