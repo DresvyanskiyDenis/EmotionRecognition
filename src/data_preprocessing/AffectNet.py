@@ -34,9 +34,9 @@ def change_labels_to_categories(df_with_labels:pd.DataFrame)->pd.DataFrame:
 
 
 def clear_df_with_subDirs_from_nonsense_labels(df_with_subDirs:pd.DataFrame)->pd.DataFrame:
-    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:,-2] != 8]
-    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:, -2] != 9]
-    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:, -2] != 10]
+    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:,-1] != 8]
+    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:, -1] != 9]
+    df_with_subDirs = df_with_subDirs[df_with_subDirs.iloc[:, -1] != 10]
     return df_with_subDirs
 
 
@@ -90,10 +90,10 @@ def extract_faces_from_original_data(df_with_abs_paths:pd.DataFrame, output_path
 
 
 def main():
-    general_dir = "/media/external_hdd_2/Datasets/AffectNet/AffectNet/zip/Manually_Annotated_Images/"
-    df_with_subDirs_train = pd.read_csv("/media/external_hdd_2/Datasets/AffectNet/AffectNet/zip/training.csv")
-    df_with_subDirs_dev = pd.read_csv("/media/external_hdd_2/Datasets/AffectNet/AffectNet/zip/validation.csv")
-    output_path = "/media/external_hdd_2/Datasets/AffectNet/AffectNet/preprocessed"
+    general_dir = "/media/external_hdd_1/Datasets/AffectNet/AffectNet/zip/Manually_Annotated_Images/"
+    df_with_subDirs_train = pd.read_csv("/media/external_hdd_1/Datasets/AffectNet/AffectNet/zip/training.csv")
+    df_with_subDirs_dev = pd.read_csv("/media/external_hdd_1/Datasets/AffectNet/AffectNet/zip/validation.csv")
+    output_path = "/media/external_hdd_1/Datasets/AffectNet/AffectNet/preprocessed"
     # form absolute paths for every image in df
     df_with_subDirs_train = form_new_dataframe_using_original_one(df_with_subDirs_train, general_dir)
     df_with_subDirs_dev = form_new_dataframe_using_original_one(df_with_subDirs_dev, general_dir)
@@ -115,4 +115,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

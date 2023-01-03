@@ -54,15 +54,15 @@ def extract_faces_with_filenames_in_dataframe(dataframe_with_filenames:pd.DataFr
 
 def main():
     # extract labels from json files
-    path_dir = r'/media/external_hdd_2/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/data'
+    path_dir = r'/media/external_hdd_1/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/data'
     labels = get_arousal_and_valence_all_videos(path_dir)
     # save labels for all videos as one dataframe
-    labels_save_path = r'/media/external_hdd_2/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed'
+    labels_save_path = r'/media/external_hdd_1/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed'
     labels = pd.concat(list(labels.values()), axis=0)
     labels.to_csv(os.path.join(labels_save_path, 'labels.csv'), index=False)
 
     # extract faces from videos
-    output_path = r'/media/external_hdd_2/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed'
+    output_path = r'/media/external_hdd_1/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed'
     extract_faces_with_filenames_in_dataframe(labels, output_path)
 
 
