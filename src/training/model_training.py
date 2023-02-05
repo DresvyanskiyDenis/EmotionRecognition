@@ -1,19 +1,20 @@
 import gc
 import os
 from functools import partial
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Dict
 
-import pandas as pd
 import numpy as np
 import torch
-from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score, mean_squared_error
+from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score, mean_squared_error, \
+    mean_absolute_error
 from torch.nn.functional import one_hot
 from torchinfo import summary
 
 import training_config
-from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, TorchMetricEvaluator
+from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
+from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
 from pytorch_utils.training_utils.losses import SoftFocalLoss
-from src.models.ViT_models import ViT_Deit_model
+from pytorch_utils.models.ViT_models import ViT_Deit_model
 
 
 
@@ -26,15 +27,15 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
                                         }
 
     evaluation_metric_arousal = {'mse': mean_squared_error,
-                                 'mae': partial(mean_squared_error, squared=False)
+                                 'mae': mean_absolute_error
                                  }
 
     evaluation_metric_valence = {'mse': mean_squared_error,
-                                 'mae': partial(mean_squared_error, squared=False)
+                                 'mae': mean_absolute_error
                                  }
     # create arrays for predictions and ground truth labels
-    predictions_classifier, predictions_arousal, predictions_valence = []
-    ground_truth_classifier, ground_truth_arousal, ground_truth_valence = []
+    predictions_classifier, predictions_arousal, predictions_valence = [],[],[]
+    ground_truth_classifier, ground_truth_arousal, ground_truth_valence = [],[],[]
 
     # start evaluation
     model.eval()
@@ -51,12 +52,12 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
             labels = [label.float().to(device) for label in labels]
 
             # forward pass
-            output_arousal = output_arousal.cpu().numpy().squeeze()
-            output_valence = output_valence.cpu().numpy().squeeze()
             output_classifier, output_arousal, output_valence = model(inputs)
             output_classifier = torch.softmax(output_classifier, dim=-1)
             output_classifier = torch.argmax(output_classifier, dim=-1)
             output_classifier = output_classifier.cpu().numpy().squeeze()
+            output_arousal = output_arousal.cpu().numpy().squeeze()
+            output_valence = output_valence.cpu().numpy().squeeze()
             # save ground_truth labels and predictions in arrays
             predictions_arousal.append(output_arousal)
             predictions_valence.append(output_valence)
@@ -178,9 +179,10 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
 
     # create model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ViT_Deit_model(num_classes=training_config.NUM_CLASSES)
+    model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=training_config.NUM_CLASSES,
+                                       num_regression_neurons=training_config.NUM_REGRESSION_NEURONS)
     model = model.to(device)
-    summary(model, input_size=(training_config.BATCH_SIZE, 3, 256, 256))
+    summary(model, input_size=(training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0], training_config.IMAGE_RESOLUTION[1]))
     # select optimizer
     optimizers = {'Adam': torch.optim.Adam,
                   'SGD': torch.optim.SGD,
@@ -236,27 +238,6 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     # clear RAM
     gc.collect()
     torch.cuda.empty_cache()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
