@@ -1,4 +1,7 @@
+from typing import Tuple
+
 NUM_CLASSES:int = 8
+NUM_REGRESSION_NEURONS:int = 2
 NUM_EPOCHS:int = 100
 BATCH_SIZE:int = 128
 AUGMENT_PROB:float = 0.05
@@ -9,7 +12,7 @@ LR_SCHEDULLER:str = "Cyclic"
 ANNEALING_PERIOD:int = 6
 BEST_MODEL_SAVE_PATH:str = "best_model/"
 
-
+IMAGE_RESOLUTION:Tuple[int, int] = (224, 224)
 
 
 
