@@ -1,12 +1,16 @@
 import os
 from functools import partial
-from typing import Tuple, List
+from typing import Tuple, List, Callable, Optional, Dict
 
 import pandas as pd
 import numpy as np
 import torch
+import torchvision.transforms.functional as F
 import torchvision.transforms as T
+from PIL import Image, ImageOps
+from PIL.Image import Resampling
 from torch.utils.data import DataLoader
+from torchvision.io import read_image
 from transformers import DeiTImageProcessor
 
 
@@ -17,21 +21,26 @@ from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_fa
     random_horizontal_flip_image, random_vertical_flip_image
 
 import training_config
-build_in_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 
 
 def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages:Tuple[int,int,int])->List[pd.DataFrame]:
     # get unique filenames (videos)
-    filenames_labels = filenames_labels.dropna()
-    filenames_labels['path'] = filenames_labels['path'].apply(lambda x: x.replace("\\", os.path.sep))
-    filenames_labels['path'] = filenames_labels['path'].astype("str")
-    filenames = filenames_labels['path'].apply(lambda x: x.split(os.path.sep)[-1].split("_")[0]+"_") # pattern: videoName_
+    filenames_labels = filenames_labels.copy().dropna()
+    filenames_labels['path'] = filenames_labels['path'].astype(str)
+    if "AFEW-VA" in filenames_labels['path'].iloc[0]:
+        filenames =filenames_labels['path'].apply(lambda x: '/'+x.split(os.path.sep)[-2]+'/')
+    elif "SEWA" in filenames_labels['path'].iloc[0] or "RECOLA" in filenames_labels['path'].iloc[0]\
+        or "SEMAINE" in filenames_labels['path'].iloc[0]:
+        filenames = filenames_labels['path'].apply(lambda x: x.split(os.path.sep)[-1].split("_")[0]+"_") # pattern: videoName_
+    else:
+        raise ValueError("This function only supports AFEW-VA, SEWA, RECOLA, and SEMAINE datasets.")
     filenames = pd.unique(filenames)
     # divide dataset into unique filenames as a dictionary
     filenames_dict = {}
     for filename in filenames:
-        # TODO: check it
+
         filenames_dict[filename] = filenames_labels[filenames_labels['path'].str.contains(filename)]
     # divide dataset into train, development, and test sets
     num_train = int(round(len(filenames_dict) * percentages[0] / 100))
@@ -40,9 +49,11 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     if num_train + num_dev + num_test != len(filenames_dict):
         raise ValueError("One or more entities in the filename_dict have been lost during splitting.")
     # get random filenames for each set
-    train_filenames = np.random.choice(filenames, num_train, replace=False)
-    dev_filenames = np.random.choice(filenames, num_dev, replace=False)
-    test_filenames = np.random.choice(filenames, num_test, replace=False)
+    indicies = np.random.permutation(len(filenames_dict))
+    train_filenames = filenames[indicies[:num_train]]
+    dev_filenames = filenames[indicies[num_train:num_train+num_dev]]
+    test_filenames = filenames[indicies[num_train+num_dev:]]
+
     # get dataframes for each set
     train = pd.concat([filenames_dict[filename] for filename in train_filenames])
     dev = pd.concat([filenames_dict[filename] for filename in dev_filenames])
@@ -55,24 +66,38 @@ def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->dict:
 
 
 
-def load_all_dataframes():
-    # TODO: check it
-    path_to_AFEW_VA = r"G:\Datasets\AFEW-VA\AFEW-VA\AFEW-VA\preprocessed".replace("\\", os.sep)
-    path_to_AffectNet = r"G:\Datasets\AffectNet\AffectNet\preprocessed".replace("\\", os.sep)
-    path_to_RECOLA = r"G:\Datasets\RECOLA\preprocessed".replace("\\", os.sep)
-    path_to_SEMAINE = r"G:\Datasets\SEMAINE\preprocessed".replace("\\", os.sep)
-    path_to_SEWA = r"G:\Datasets\SEWA\preprocessed".replace("\\", os.sep)
+def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+     Loads all dataframes for the datasets AFEW-VA, AffectNet, RECOLA, SEMAINE, and SEWA, and split them into
+        train, dev, and test sets.
+    Returns: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
+        The tuple of train, dev, and test data.
+
+    """
+    path_to_AFEW_VA = r"/media/external_hdd_2/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed".replace("\\", os.sep)
+    path_to_AffectNet = r"/media/external_hdd_2/Datasets/AffectNet/AffectNet/preprocessed".replace("\\", os.sep)
+    path_to_RECOLA = r"/media/external_hdd_2/Datasets/RECOLA/preprocessed".replace("\\", os.sep)
+    path_to_SEMAINE = r"/media/external_hdd_2/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
+    path_to_SEWA = r"/media/external_hdd_2/Datasets/SEWA/preprocessed".replace("\\", os.sep)
 
     # load dataframes and add np.NaN labels to columns that are not present in the dataset
     AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA,"labels.csv"))
-    RECOLA = pd.read_csv(os.path.join(path_to_RECOLA + "labels.csv"))
-    SEMAINE = pd.read_csv(os.path.join(path_to_SEMAINE + "labels.csv"))
-    SEWA = pd.read_csv(os.path.join(path_to_SEWA + "labels.csv"))
+    RECOLA = pd.read_csv(os.path.join(path_to_RECOLA,"preprocessed_labels.csv"))
+    SEMAINE = pd.read_csv(os.path.join(path_to_SEMAINE,"preprocessed_labels.csv"))
+    SEWA = pd.read_csv(os.path.join(path_to_SEWA,"preprocessed_labels.csv"))
 
-    AFEW_VA["category"] = np.NaN
-    RECOLA["category"] = np.NaN
-    SEMAINE["category"] = np.NaN
-    SEWA["category"] = np.NaN
+    # change column names of the datasets to "path" from "frame_num"
+    AFEW_VA = AFEW_VA.rename(columns={"frame_num": "path"})
+    RECOLA = RECOLA.rename(columns={"filename": "path"})
+    SEMAINE = SEMAINE.rename(columns={"filename": "path"})
+    SEWA = SEWA.rename(columns={"filename": "path"})
+    # drop timestamp from RECOLA, SEMAINE, and SEWA
+    RECOLA = RECOLA.drop(columns=['timestamp'])
+    SEMAINE = SEMAINE.drop(columns=['timestamp'])
+    SEWA = SEWA.drop(columns=['timestamp'])
+    # transform valence and arousal values from [-10, 10] range to [-1, 1] range for AFEW-VA dataset
+    AFEW_VA['valence'] = AFEW_VA['valence'].apply(lambda x: x / 10.)
+    AFEW_VA['arousal'] = AFEW_VA['arousal'].apply(lambda x: x / 10.)
 
 
     # splitting to train, development, and test sets
@@ -81,60 +106,133 @@ def load_all_dataframes():
     RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages)
     SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages)
     SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages)
+    # add NaN values to 'category' column for the datasets that do not have it
+    AFEW_VA_train['category'], AFEW_VA_dev['category'], AFEW_VA_test['category'] = np.NaN, np.NaN, np.NaN
+    RECOLA_train['category'], RECOLA_dev['category'], RECOLA_test['category'] = np.NaN, np.NaN, np.NaN
+    SEMAINE_train['category'], SEMAINE_dev['category'], SEMAINE_test['category'] = np.NaN, np.NaN, np.NaN
+    SEWA_train['category'], SEWA_dev['category'], SEWA_test['category'] = np.NaN, np.NaN, np.NaN
     # for the AffectNet we need to do a splitting separately, since it has no video, just a lot of images
     AffectNet_train = pd.read_csv(os.path.join(path_to_AffectNet, "train_labels.csv"))
     AffectNet_train = transform_emo_categories_to_int(AffectNet_train, training_config.EMO_CATEGORIES)
     AffectNet_dev = pd.read_csv(os.path.join(path_to_AffectNet, "dev_labels.csv"))
     AffectNet_dev = transform_emo_categories_to_int(AffectNet_dev, training_config.EMO_CATEGORIES)
+    # change columns name of AffectNet from abs_path to path
+    AffectNet_train = AffectNet_train.rename(columns={"abs_path": "path"})
+    AffectNet_dev = AffectNet_dev.rename(columns={"abs_path": "path"})
 
 
     # concatenate all dataframes
     train = pd.concat([AFEW_VA_train, RECOLA_train, SEMAINE_train, SEWA_train, AffectNet_train])
     dev = pd.concat([AFEW_VA_dev, RECOLA_dev, SEMAINE_dev, SEWA_dev, AffectNet_dev])
     test = pd.concat([AFEW_VA_test, RECOLA_test, SEMAINE_test, SEWA_test])
+    # change external_hdd_1 to external_hdd_2 in paths for all datasets
+    train['path'] = train['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    dev['path'] = dev['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    test['path'] = test['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
 
     return (train, dev, test)
 
 
 def preprocess_image_DeiT(image:np.ndarray)->torch.Tensor:
-    image = build_in_preprocessing_function(images=image, return_tensors="pt")['pixel_values']
+    image = DeiT_preprocessing_function(images=image, return_tensors="pt")['pixel_values']
     return image
 
-def resize_image_to_224(image:np.ndarray)->np.ndarray:
-    # TODO: implement it in a way you wanted: black colour to make the image not distorted, etc.
-    pass
+def preprocess_image_MobileNetV3(image:torch.Tensor)->torch.Tensor:
+    """
+    Preprocesses an image or batch of images for MobileNetV3 model.
+    Args:
+        image: torch.Tensor
+            Either a single image or a batch of images. The image should be in RGB format.
 
-def construct_data_loaders(train, dev, test, num_workers:int=8)\
-        ->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
-    """ # TODO: write a docstring
+    Returns: torch.Tensor
+        The preprocessed image or batch of images.
 
-    :param train:
-    :param dev:
-    :param test:
-    :param augment_prob:
-    :param batch_size:
-    :param num_workers:
-    :return:
+    """
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+    if not isinstance(image, torch.Tensor):
+        image = F.pil_to_tensor(image)
+    image = F.convert_image_dtype(image, torch.float)
+    image = F.normalize(image, mean=mean, std=std)
+    return image
+
+def resize_image_to_224_saving_aspect_ratio(image:torch.Tensor)-> torch.Tensor:
+    # TODO: redo it using only torch
+    expected_size = 224
+    # transform to PIL image
+    im = image.permute(1,2,0).cpu().detach().numpy()
+    im = Image.fromarray(im)
+
+    old_size = im.size  # old_size[0] is in (width, height) format
+    ratio = float(expected_size) / max(old_size)
+    new_size = tuple([int(x * ratio) for x in old_size])
+
+    # create a new image and paste the resized on it
+    im = im.resize(new_size, Resampling.BILINEAR)
+
+
+    new_im = Image.new("RGB", (expected_size, expected_size))
+    new_im.paste(im, ((expected_size - new_size[0]) // 2,
+                      (expected_size - new_size[1]) // 2))
+    # transform back to torch.Tensor
+    new_im = F.pil_to_tensor(new_im)
+    return new_im
+
+
+def get_augmentation_function(probability:float)->Dict[Callable, float]:
+    """
+    Returns a dictionary of augmentation functions and the probabilities of their application.
+    Args:
+        probability: float
+            The probability of applying the augmentation function.
+
+    Returns: Dict[Callable, float]
+        A dictionary of augmentation functions and the probabilities of their application.
+
     """
     augmentation_functions = {
-        pad_image_random_factor: training_config.AUGMENT_PROB,
-        grayscale_image: training_config.AUGMENT_PROB,
-        partial(collor_jitter_image_random, brightness=0.5, hue=0.3, contrast=0.3, saturation=0.3): training_config.AUGMENT_PROB,
+        pad_image_random_factor: probability,
+        grayscale_image: probability,
+        partial(collor_jitter_image_random, brightness=0.5, hue=0.3, contrast=0.3,
+                saturation=0.3): probability,
         partial(gaussian_blur_image_random, kernel_size=(5, 9), sigma=(0.1, 5)): training_config.AUGMENT_PROB,
-        random_perspective_image: training_config.AUGMENT_PROB,
-        random_rotation_image: training_config.AUGMENT_PROB,
-        partial(random_crop_image, cropping_factor_limits=(0.7, 0.9)): training_config.AUGMENT_PROB,
-        random_posterize_image: training_config.AUGMENT_PROB,
-        partial(random_adjust_sharpness_image, sharpness_factor_limits=(0.1, 3)): training_config.AUGMENT_PROB,
-        random_equalize_image: training_config.AUGMENT_PROB,
-        random_horizontal_flip_image: training_config.AUGMENT_PROB,
-        random_vertical_flip_image: training_config.AUGMENT_PROB
+        random_perspective_image: probability,
+        random_rotation_image: probability,
+        partial(random_crop_image, cropping_factor_limits=(0.7, 0.9)): probability,
+        random_posterize_image: probability,
+        partial(random_adjust_sharpness_image, sharpness_factor_limits=(0.1, 3)): probability,
+        random_equalize_image: probability,
+        random_horizontal_flip_image: probability,
+        random_vertical_flip_image: probability,
     }
+    return augmentation_functions
 
-    preprocessing_functions=[
-        resize_image_to_224,
-        preprocess_image_DeiT
-    ]
+
+def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFrame,
+                           preprocessing_functions:List[Callable],
+                           augmentation_functions:Optional[Dict[Callable, float]]=None,
+                           num_workers:int=8)\
+        ->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+    """ Constructs the data loaders for the train, dev and test sets.
+
+    Args:
+        train: pd.DataFrame
+            The train set. It should contain the columns 'path' TODO: write columns.
+        dev: pd.DataFrame
+            The dev set. It should contain the columns 'path' TODO: write columns.
+        test: pd.DataFrame
+            The test set. It should contain the columns 'path' TODO: write columns.
+        preprocessing_functions: List[Callable]
+            A list of preprocessing functions to be applied to the images.
+        augmentation_functions: Optional[Dict[Callable, float]]
+            A dictionary of augmentation functions and the probabilities of their application.
+        num_workers: int
+            The number of workers to be used by the data loaders.
+
+    Returns: Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+        The data loaders for the train, dev and test sets.
+
+    """
 
     train_data_loader = ImageDataLoader(paths_with_labels=train, preprocessing_functions=preprocessing_functions,
                  augmentation_functions=augmentation_functions, shuffle=True)
@@ -151,5 +249,38 @@ def construct_data_loaders(train, dev, test, num_workers:int=8)\
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 
+
+def load_data_and_construct_dataloaders()->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+    """
+    Loads the data presented in pd.DataFrames and constructs the data loaders using them. It is a general function
+    to assemble all functions defined above.
+    Returns: Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+        The train, dev and test data loaders.
+
+    """
+    # load pd.DataFrames
+    train, dev, test = load_all_dataframes()
+    # define preprocessing functions
+    preprocessing_functions = [resize_image_to_224_saving_aspect_ratio,
+                               preprocess_image_MobileNetV3]
+    # define augmentation functions
+    augmentation_functions = get_augmentation_function(training_config.AUGMENT_PROB)
+    # construct data loaders
+    train_dataloader, dev_dataloader, test_dataloader = construct_data_loaders(train, dev, test,
+                                                                               preprocessing_functions,
+                                                                               augmentation_functions,
+                                                                               num_workers=training_config.NUM_WORKERS)
+
+    return (train_dataloader, dev_dataloader, test_dataloader)
+
+
+
 if __name__ == "__main__":
-    load_all_dataframes()
+    train_data_loader, dev_data_loader, test_data_loader = load_data_and_construct_dataloaders()
+
+    for x,y in train_data_loader:
+        print(x.shape, y.shape)
+        print("-------------------")
+
+
+
