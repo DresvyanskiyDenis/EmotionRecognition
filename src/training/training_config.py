@@ -13,9 +13,7 @@ ANNEALING_PERIOD:int = 6
 BEST_MODEL_SAVE_PATH:str = "best_model/"
 
 IMAGE_RESOLUTION:Tuple[int, int] = (224, 224)
-
-
-
+NUM_WORKERS:int = 8
 
 EMO_CATEGORIES:dict = {
     "N":0,
