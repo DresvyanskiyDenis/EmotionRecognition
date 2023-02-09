@@ -11,6 +11,7 @@ BATCH_SIZE:int = 128
 OPTIMIZER:str = "Adam"
 AUGMENT_PROB:float = 0.05
 EARLY_STOPPING_PATIENCE:int = 15
+WEIGHT_DECAY:float = 0.00001
 
 # scheduller
 LR_SCHEDULLER:str = "Cyclic"
