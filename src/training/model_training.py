@@ -202,7 +202,7 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
                   'SGD': torch.optim.SGD,
                   'RMSprop': torch.optim.RMSprop,
                   'AdamW': torch.optim.AdamW}
-    optimizer = optimizers[training_config.OPTIMIZER](model.parameters(), lr=training_config.LR_MAX_CYCLIC)
+    optimizer = optimizers[training_config.OPTIMIZER](model.parameters(), lr=training_config.LR_MAX_CYCLIC, weight_decay=training_config.WEIGHT_DECAY)
     # Loss functions
     criterions = (torch.nn.MSELoss(), torch.nn.MSELoss(), SoftFocalLoss(softmax=True, alpha=class_weights, gamma=2))
     # create LR scheduler
