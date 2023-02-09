@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision.io import read_image
 from transformers import DeiTImageProcessor
 
-
+from decorators.common_decorators import timer
 from pytorch_utils.data_loaders.ImageDataLoader_new import ImageDataLoader
 from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_factor, grayscale_image, \
     collor_jitter_image_random, gaussian_blur_image_random, random_perspective_image, random_rotation_image, \
@@ -74,11 +74,11 @@ def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         The tuple of train, dev, and test data.
 
     """
-    path_to_AFEW_VA = r"/media/external_hdd_2/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed".replace("\\", os.sep)
-    path_to_AffectNet = r"/media/external_hdd_2/Datasets/AffectNet/AffectNet/preprocessed".replace("\\", os.sep)
-    path_to_RECOLA = r"/media/external_hdd_2/Datasets/RECOLA/preprocessed".replace("\\", os.sep)
-    path_to_SEMAINE = r"/media/external_hdd_2/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
-    path_to_SEWA = r"/media/external_hdd_2/Datasets/SEWA/preprocessed".replace("\\", os.sep)
+    path_to_AFEW_VA = r"/work/home/dsu/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed".replace("\\", os.sep)
+    path_to_AffectNet = r"/work/home/dsu/Datasets/AffectNet/AffectNet/preprocessed".replace("\\", os.sep)
+    path_to_RECOLA = r"/work/home/dsu/Datasets/RECOLA/preprocessed".replace("\\", os.sep)
+    path_to_SEMAINE = r"/work/home/dsu/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
+    path_to_SEWA = r"/work/home/dsu/Datasets/SEWA/preprocessed".replace("\\", os.sep)
 
     # load dataframes and add np.NaN labels to columns that are not present in the dataset
     AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA,"labels.csv"))
@@ -100,6 +100,7 @@ def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     AFEW_VA['arousal'] = AFEW_VA['arousal'].apply(lambda x: x / 10.)
 
 
+
     # splitting to train, development, and test sets
     percentages = (80, 10, 10)
     AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages)
@@ -119,6 +120,11 @@ def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     # change columns name of AffectNet from abs_path to path
     AffectNet_train = AffectNet_train.rename(columns={"abs_path": "path"})
     AffectNet_dev = AffectNet_dev.rename(columns={"abs_path": "path"})
+    # drop all images from AffectNet, which are mot jpg or png
+    allowed_extensions = ['jpg', 'png', 'JPG', 'jpeg', 'PNG', 'Jpeg','JPEG']
+    AffectNet_train = AffectNet_train[AffectNet_train['path'].apply(lambda x: x.split('.')[-1] in allowed_extensions)]
+    AffectNet_dev = AffectNet_dev[AffectNet_dev['path'].apply(lambda x: x.split('.')[-1] in allowed_extensions)]
+
 
 
     # concatenate all dataframes
@@ -275,12 +281,55 @@ def load_data_and_construct_dataloaders()->Tuple[torch.utils.data.DataLoader, to
 
 
 
-if __name__ == "__main__":
+@timer
+def main():
     train_data_loader, dev_data_loader, test_data_loader = load_data_and_construct_dataloaders()
-
-    for x,y in train_data_loader:
+    for x, y in train_data_loader:
         print(x.shape, y.shape)
         print("-------------------")
+
+if __name__ == "__main__":
+    main()
+
+
+    """path_to_AFEW_VA = r"/work/home/dsu/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed".replace("\\", os.sep)
+    path_to_AffectNet = r"/work/home/dsu/Datasets/AffectNet/AffectNet/preprocessed".replace("\\", os.sep)
+    path_to_RECOLA = r"/work/home/dsu/Datasets/RECOLA/preprocessed".replace("\\", os.sep)
+    path_to_SEMAINE = r"/work/home/dsu/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
+    path_to_SEWA = r"/work/home/dsu/Datasets/SEWA/preprocessed".replace("\\", os.sep)
+
+    # load dataframes and add np.NaN labels to columns that are not present in the dataset
+    AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA, "labels.csv"))
+    RECOLA = pd.read_csv(os.path.join(path_to_RECOLA, "preprocessed_labels.csv"))
+    SEMAINE = pd.read_csv(os.path.join(path_to_SEMAINE, "preprocessed_labels.csv"))
+    SEWA = pd.read_csv(os.path.join(path_to_SEWA, "preprocessed_labels.csv"))
+    AffectNet_train = pd.read_csv(os.path.join(path_to_AffectNet, "train_labels.csv"))
+    AffectNet_dev = pd.read_csv(os.path.join(path_to_AffectNet, "dev_labels.csv"))
+
+    # change filepaths to new ones
+    AFEW_VA["frame_num"]=AFEW_VA["frame_num"].astype(str)
+    RECOLA["filename"]=RECOLA["filename"].astype(str)
+    SEMAINE["filename"]=SEMAINE["filename"].astype(str)
+    SEWA["filename"]=SEWA["filename"].astype(str)
+    AffectNet_train["abs_path"]=AffectNet_train["abs_path"].astype(str)
+    AffectNet_dev["abs_path"]=AffectNet_dev["abs_path"].astype(str)
+
+    AFEW_VA["frame_num"] = AFEW_VA["frame_num"].apply(lambda x: x.replace("/media/external_hdd_1/Datasets", "/work/home/dsu/Datasets"))
+    RECOLA["filename"] = RECOLA["filename"].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    SEMAINE["filename"] = SEMAINE["filename"].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    SEWA["filename"] = SEWA["filename"].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    AffectNet_train["abs_path"] = AffectNet_train["abs_path"].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    AffectNet_dev["abs_path"] = AffectNet_dev["abs_path"].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+
+    # save dataframes
+    AFEW_VA.to_csv(os.path.join(path_to_AFEW_VA, "labels.csv"), index=False)
+    RECOLA.to_csv(os.path.join(path_to_RECOLA, "preprocessed_labels.csv"), index=False)
+    SEMAINE.to_csv(os.path.join(path_to_SEMAINE, "preprocessed_labels.csv"), index=False)
+    SEWA.to_csv(os.path.join(path_to_SEWA, "preprocessed_labels.csv"), index=False)
+    AffectNet_train.to_csv(os.path.join(path_to_AffectNet, "train_labels.csv"), index=False)
+    AffectNet_dev.to_csv(os.path.join(path_to_AffectNet, "dev_labels.csv"), index=False)"""
+
+
 
 
 
