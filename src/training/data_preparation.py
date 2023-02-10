@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from typing import Tuple, List, Callable, Optional, Dict
+from typing import Tuple, List, Callable, Optional, Dict, Union
 
 import pandas as pd
 import numpy as np
@@ -250,18 +250,27 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
                     augmentation_functions=None, shuffle=False)
 
     train_dataloader = DataLoader(train_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
-    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
-    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
+    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//2)
+    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//4)
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 
 
-def load_data_and_construct_dataloaders()->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+def load_data_and_construct_dataloaders(return_class_weights:Optional[bool]=False)->\
+        Union[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader],
+              Tuple[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader], torch.Tensor]]:
     """
+        Args:
+        return_class_weights: Optional[bool]
+            If True, the function returns the class weights as well.
+
     Loads the data presented in pd.DataFrames and constructs the data loaders using them. It is a general function
     to assemble all functions defined above.
     Returns: Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]
         The train, dev and test data loaders.
+        or
+        Tuple[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader], torch.Tensor]
+        The train, dev and test data loaders and the class weights calculated based on the training labels.
 
     """
     # load pd.DataFrames
@@ -276,6 +285,18 @@ def load_data_and_construct_dataloaders()->Tuple[torch.utils.data.DataLoader, to
                                                                                preprocessing_functions,
                                                                                augmentation_functions,
                                                                                num_workers=training_config.NUM_WORKERS)
+
+    if return_class_weights:
+        num_classes = train.iloc[:, -1].nunique()
+        labels = pd.DataFrame(train.iloc[:,-1])
+        labels = labels.dropna()
+        labels = labels.astype(int)
+        class_weights = torch.nn.functional.one_hot(torch.tensor(labels.values), num_classes=num_classes)
+        class_weights = class_weights.sum(axis=0)
+        class_weights = 1. / (class_weights / class_weights.sum())
+        # normalize class weights
+        class_weights = class_weights / class_weights.sum()
+        return ((train_dataloader, dev_dataloader, test_dataloader), class_weights)
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 
