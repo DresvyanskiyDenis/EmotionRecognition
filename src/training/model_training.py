@@ -44,6 +44,7 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
     model.eval()
     with torch.no_grad():
         for i, data in enumerate(generator):
+            # TODO: change this cycle as you did for the training cycle
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
             inputs = inputs.float()
