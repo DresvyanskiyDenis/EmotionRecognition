@@ -11,12 +11,14 @@ from torch.nn.functional import one_hot
 from torchinfo import summary
 
 import training_config
+from decorators.common_decorators import timer
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
 from pytorch_utils.training_utils.losses import SoftFocalLoss
 from pytorch_utils.models.ViT_models import ViT_Deit_model
-from src.training.data_preparation import load_data_and_construct_dataloaders, calculate_class_weights
+from src.training.data_preparation import load_data_and_construct_dataloaders
+from src.training.training_utils import calculate_class_weights
 
 
 def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader, device:torch.device) -> Tuple[Dict[object, float],...]:
@@ -90,9 +92,9 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
     return (evaluation_metrics_arousal, evaluation_metrics_valence, evaluation_metrics_classifier)
 
 
-
 def train_step(model:torch.nn.Module, criterion:Tuple[torch.nn.Module,...],
-               inputs:Tuple[torch.Tensor,...], ground_truths:List[torch.Tensor]) -> List:
+               inputs:Tuple[torch.Tensor,...], ground_truths:List[torch.Tensor],
+               device:torch.device) -> List:
     """ Performs one training step for a model.
 
     :param model: torch.nn.Module
@@ -104,27 +106,54 @@ def train_step(model:torch.nn.Module, criterion:Tuple[torch.nn.Module,...],
     :param ground_truths: Tuple[torch.Tensor,...]
             Ground truths for the model. Should be in the same order as the outputs of the model.
             Some elements can be NaN if the corresponding output is not used for training (label does not exist).
+    :param device: torch.device
+            Device to use for training.
     :return:
     """
     # forward pass
-    outputs = model(*inputs)
-    losses = []
-    # TODO: check if masking works right
-    for i, criterion_i in enumerate(criterion):
+    outputs = model(inputs)
+    regression_output = [outputs[1][:,0], outputs[1][:, 1]]
+    classification_output = outputs[0]
+    # criterions with indices 0 and 1 are for regression, 2 - for classification
+    regression_criterion = criterion[0:2]
+    classification_criterion = criterion[2]
+    # prepare labels for loss calculation
+    # separate labels into a list of torch.Tensor
+    regression_labels = [ground_truths[:, 0], ground_truths[:, 1]]
+    classification_labels = ground_truths[:, 2]
+    # go through regression criterions
+    regression_losses = []
+    for i, criterion_i in enumerate(regression_criterion):
         # calculate mask for current loss function
-        mask = ~torch.isnan(ground_truths[i])
+        regression_mask = ~torch.isnan(regression_labels[i])
+        output = regression_output[i][regression_mask]
+        ground_truth = regression_labels[i][regression_mask]
         # calculate loss based on mask
-        loss = criterion_i(outputs[i][mask], ground_truths[i][mask])
-        losses.append(loss)
+        ground_truth = ground_truth.to(device)
+        loss = criterion_i(output, ground_truth)
+        regression_losses.append(loss)
 
+    # go through classification criterion
+    classification_mask = ~torch.isnan(classification_labels)
+    output = classification_output[classification_mask]
+    ground_truth = classification_labels[classification_mask]
+    # turn into one-hot encoding
+    ground_truth = one_hot(ground_truth.long(), num_classes=training_config.NUM_CLASSES)
+    # calculate loss based on mask
+    ground_truth = ground_truth.to(device)
+    loss = classification_criterion(output, ground_truth)
+    classification_losses = [loss]
+    # combine losses into one array
+    losses = [*regression_losses, *classification_losses]
     return losses
+
 
 
 def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoader,
                optimizer:torch.optim.Optimizer, criterions:Tuple[torch.nn.Module,...],
                device:torch.device, print_step:int=100,
                accumulate_gradients:Optional[int]=1,
-               warmup_lr_scheduller:Optional[torch.optim.lr_scheduler]=None)->float:
+               warmup_lr_scheduller:Optional[object]=None)->float:
     """ Performs one epoch of training for a model.
 
     :param model: torch.nn.Module
@@ -158,19 +187,16 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
         inputs = inputs.float()
         inputs = inputs.to(device)
 
-        # separate labels into a list of torch.Tensor
-        labels = [labels[:,0], labels[:,1], labels[:,2]]
-        labels[2] = one_hot(labels[2].long(), num_classes=training_config.NUM_CLASSES)
-        labels = [label.float().to(device) for label in labels]
 
         # do train step
         with torch.set_grad_enabled(True):
-            step_losses = train_step(model, criterions, inputs, labels)
+            # form indecex of labels which should be one-hot encoded
+            step_losses = train_step(model, criterions, inputs, labels, device)
             # normalize losses by number of accumulate gradient steps
             step_losses = [step_loss / accumulate_gradients for step_loss in step_losses]
             # backward pass
-            for step_loss in step_losses:
-                step_loss.backward()
+            sum_losses = sum(step_losses)
+            sum_losses.backward()
             # update weights if we have accumulated enough gradients
             if (i + 1) % accumulate_gradients == 0 or (i + 1 == len(train_generator)):
                 optimizer.step()
@@ -179,8 +205,8 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
                     warmup_lr_scheduller.step()
 
         # print statistics
-        running_loss += sum([loss.item() for loss in step_losses])
-        total_loss += sum([loss.item() for loss in step_losses])
+        running_loss += sum_losses.item()
+        total_loss += sum_losses.item()
         counter += 1
         if i % print_step == (print_step - 1):  # print every print_step mini-batches
             print("Mini-batch: %i, loss: %.10f" % (i, running_loss / print_step))
@@ -204,6 +230,7 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
                   'AdamW': torch.optim.AdamW}
     optimizer = optimizers[training_config.OPTIMIZER](model.parameters(), lr=training_config.LR_MAX_CYCLIC, weight_decay=training_config.WEIGHT_DECAY)
     # Loss functions
+    class_weights = class_weights.to(device)
     criterions = (torch.nn.MSELoss(), torch.nn.MSELoss(), SoftFocalLoss(softmax=True, alpha=class_weights, gamma=2))
     # create LR scheduler
     lr_schedullers = {
@@ -221,7 +248,8 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     }
     lr_scheduller = lr_schedullers[training_config.LR_SCHEDULLER]
     # if lr_scheduller is warmup_cyclic, we need to change the learning rate of optimizer
-    optimizer.param_groups[0]['lr'] = training_config.LR_MIN_WARMUP
+    if training_config.LR_SCHEDULLER == 'Warmup_cyclic':
+        optimizer.param_groups[0]['lr'] = training_config.LR_MIN_WARMUP
     # callbacks
     val_metrics = {
         'val_recall': partial(recall_score, average='macro'),
@@ -267,9 +295,7 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
 
 def main():
     # get data loaders
-    train_generator, dev_generator, class_weights = load_data_and_construct_dataloaders()
-    # calculate class_weights
-    class_weights = calculate_class_weights(train_generator)
+    (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(return_class_weights=True)
     # train model
     train_model(train_generator=train_generator, dev_generator=dev_generator,
     class_weights=class_weights)
