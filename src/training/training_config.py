@@ -24,7 +24,7 @@ WARMUP_MODE:str = "linear"
 
 # general params
 BEST_MODEL_SAVE_PATH:str = "best_model/"
-NUM_WORKERS:int = 8
+NUM_WORKERS:int = 16
 
 
 
