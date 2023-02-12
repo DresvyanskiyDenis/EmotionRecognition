@@ -14,12 +14,12 @@ EARLY_STOPPING_PATIENCE:int = 15
 WEIGHT_DECAY:float = 0.00001
 
 # scheduller
-LR_SCHEDULLER:str = "Cyclic"
-ANNEALING_PERIOD:int = 6
+LR_SCHEDULLER:str = "Warmup_cyclic"
+ANNEALING_PERIOD:int = 5
 LR_MAX_CYCLIC:float = 0.005
-LR_MIN_CYCLIC:float = 0.001
+LR_MIN_CYCLIC:float = 0.0005
 LR_MIN_WARMUP:float = 0.0001
-WARMUP_STEPS:int = 500
+WARMUP_STEPS:int = 200
 WARMUP_MODE:str = "linear"
 
 # gradual unfreezing
@@ -29,6 +29,7 @@ LAYERS_TO_UNFREEZE_BEFORE_START:int = 7
 # general params
 BEST_MODEL_SAVE_PATH:str = "best_models/"
 NUM_WORKERS:int = 16
+ACCUMULATE_GRADIENTS:int = 2
 
 
 
