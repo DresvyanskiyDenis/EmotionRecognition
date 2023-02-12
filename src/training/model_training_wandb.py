@@ -1,3 +1,6 @@
+import sys
+sys.path.extend(["/work/home/dsu/datatools/"])
+sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
 import gc
 import os
 from functools import partial
