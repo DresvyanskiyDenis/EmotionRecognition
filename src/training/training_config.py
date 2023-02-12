@@ -22,6 +22,10 @@ LR_MIN_WARMUP:float = 0.0001
 WARMUP_STEPS:int = 200
 WARMUP_MODE:str = "linear"
 
+# gradual unfreezing
+UNFREEZING_LAYERS_PER_EPOCH:int = 2
+LAYERS_TO_UNFREEZE_BEFORE_START:int = 7
+
 # general params
 BEST_MODEL_SAVE_PATH:str = "best_model/"
 NUM_WORKERS:int = 16
