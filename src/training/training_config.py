@@ -19,7 +19,7 @@ ANNEALING_PERIOD:int = 6
 LR_MAX_CYCLIC:float = 0.005
 LR_MIN_CYCLIC:float = 0.001
 LR_MIN_WARMUP:float = 0.0001
-WARMUP_STEPS:int = 200
+WARMUP_STEPS:int = 500
 WARMUP_MODE:str = "linear"
 
 # gradual unfreezing
@@ -27,7 +27,7 @@ UNFREEZING_LAYERS_PER_EPOCH:int = 2
 LAYERS_TO_UNFREEZE_BEFORE_START:int = 7
 
 # general params
-BEST_MODEL_SAVE_PATH:str = "best_model/"
+BEST_MODEL_SAVE_PATH:str = "best_models/"
 NUM_WORKERS:int = 16
 
 
