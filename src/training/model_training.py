@@ -14,7 +14,7 @@ import training_config
 from decorators.common_decorators import timer
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
-from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
+from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer
 from pytorch_utils.training_utils.losses import SoftFocalLoss
 from pytorch_utils.models.ViT_models import ViT_Deit_model
 from src.training.data_preparation import load_data_and_construct_dataloaders
@@ -44,38 +44,56 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
     model.eval()
     with torch.no_grad():
         for i, data in enumerate(generator):
-            # TODO: change this cycle as you did for the training cycle
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
             inputs = inputs.float()
             inputs = inputs.to(device)
 
-            # separate labels into a list of torch.Tensor
-            labels = [labels[:,0], labels[:,1], labels[:,2]]
-            labels[2] = one_hot(labels[2].long(), num_classes=training_config.NUM_CLASSES)
-            labels = [label.float().to(device) for label in labels]
 
             # forward pass
-            output_classifier, output_arousal, output_valence = model(inputs)
-            output_classifier = torch.softmax(output_classifier, dim=-1)
-            output_classifier = torch.argmax(output_classifier, dim=-1)
-            output_classifier = output_classifier.cpu().numpy().squeeze()
-            output_arousal = output_arousal.cpu().numpy().squeeze()
-            output_valence = output_valence.cpu().numpy().squeeze()
-            # save ground_truth labels and predictions in arrays
-            predictions_arousal.append(output_arousal)
-            predictions_valence.append(output_valence)
-            predictions_classifier.append(output_classifier)
-            ground_truth_arousal.append(labels[0].cpu().numpy().squeeze())
-            ground_truth_valence.append(labels[1].cpu().numpy().squeeze())
-            ground_truth_classifier.append(torch.argmax(labels[2], dim=-1).cpu().numpy().squeeze())
-        # concatenate evaluation metrics
-        predictions_arousal = np.concatenate(predictions_arousal)
-        predictions_valence = np.concatenate(predictions_valence)
-        predictions_classifier = np.concatenate(predictions_classifier)
-        ground_truth_arousal = np.concatenate(ground_truth_arousal)
-        ground_truth_valence = np.concatenate(ground_truth_valence)
-        ground_truth_classifier = np.concatenate(ground_truth_classifier)
+            outputs = model(inputs)
+            regression_output = [outputs[1][:, 0], outputs[1][:, 1]]
+            classification_output = outputs[0]
+
+            # transform classification output to fit labels
+            classification_output = torch.softmax(classification_output, dim=-1)
+            classification_output = classification_output.cpu().numpy().squeeze()
+            classification_output = np.argmax(classification_output, axis=-1)
+            # transform regression output to fit labels
+            regression_output = [regression_output[0].cpu().numpy().squeeze(), regression_output[1].cpu().numpy().squeeze()]
+
+            # transform ground truth labels to fit predictions and sklearn metrics
+            classification_ground_truth = labels[:,2].cpu().numpy().squeeze()
+            regression_ground_truth = [labels[:,0].cpu().numpy().squeeze(), labels[:,1].cpu().numpy().squeeze()]
+
+            # save ground_truth labels and predictions in arrays to calculate metrics afterwards by one time
+            predictions_arousal.append(regression_output[0])
+            predictions_valence.append(regression_output[1])
+            predictions_classifier.append(classification_output)
+            ground_truth_arousal.append(regression_ground_truth[0])
+            ground_truth_valence.append(regression_ground_truth[1])
+            ground_truth_classifier.append(classification_ground_truth)
+
+        # concatenate all predictions and ground truth labels
+        predictions_arousal = np.concatenate(predictions_arousal, axis=0)
+        predictions_valence = np.concatenate(predictions_valence, axis=0)
+        predictions_classifier = np.concatenate(predictions_classifier, axis=0)
+        ground_truth_arousal = np.concatenate(ground_truth_arousal, axis=0)
+        ground_truth_valence = np.concatenate(ground_truth_valence, axis=0)
+        ground_truth_classifier = np.concatenate(ground_truth_classifier, axis=0)
+
+        # create mask for all NaN values to remove them from evaluation
+        mask_arousal = ~np.isnan(ground_truth_arousal)
+        mask_valence = ~np.isnan(ground_truth_valence)
+        mask_classifier = ~np.isnan(ground_truth_classifier)
+        # remove NaN values from arrays
+        predictions_arousal = predictions_arousal[mask_arousal]
+        predictions_valence = predictions_valence[mask_valence]
+        predictions_classifier = predictions_classifier[mask_classifier]
+        ground_truth_arousal = ground_truth_arousal[mask_arousal]
+        ground_truth_valence = ground_truth_valence[mask_valence]
+        ground_truth_classifier = ground_truth_classifier[mask_classifier]
+
         # calculate evaluation metrics
         evaluation_metrics_arousal = {metric: evaluation_metric_arousal[metric](ground_truth_arousal, predictions_arousal) for metric in evaluation_metric_arousal}
         evaluation_metrics_valence = {metric: evaluation_metric_valence[metric](ground_truth_valence, predictions_valence) for metric in evaluation_metric_valence}
@@ -223,7 +241,7 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=training_config.NUM_CLASSES,
                                        num_regression_neurons=training_config.NUM_REGRESSION_NEURONS)
     model = model.to(device)
-    summary(model, input_size=(training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0], training_config.IMAGE_RESOLUTION[1]))
+    #summary(model, input_size=(training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0], training_config.IMAGE_RESOLUTION[1]))
     # select optimizer
     optimizers = {'Adam': torch.optim.Adam,
                   'SGD': torch.optim.SGD,
@@ -252,15 +270,22 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     if training_config.LR_SCHEDULLER == 'Warmup_cyclic':
         optimizer.param_groups[0]['lr'] = training_config.LR_MIN_WARMUP
     # callbacks
-    val_metrics = {
-        'val_recall': partial(recall_score, average='macro'),
-        'val_precision': partial(precision_score, average='macro'),
-        'val_f1_score': partial(f1_score, average='macro')
-    }
-    best_val_metric_value = np.inf # we do minimization
+        # layers unfreezer
+    layers_for_unfreezing = [
+        *list(list(list(model.children())[0].children())[0].children()),
+        *list(list(model.children())[0].children())[1:],
+        *list(model.children())[1:]
+    ]
+    layers_unfreezer = GradualLayersUnfreezer(model=model, layers = layers_for_unfreezing,
+                                              layers_per_epoch=training_config.UNFREEZING_LAYERS_PER_EPOCH,
+                                              layers_to_unfreeze_before_start=training_config.LAYERS_TO_UNFREEZE_BEFORE_START,
+                                              input_shape=(training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0], training_config.IMAGE_RESOLUTION[1]),
+                                              verbose=True)
+        # early stopping
+    best_val_metric_value = -np.inf # we do maximization
     early_stopping_callback = TorchEarlyStopping(verbose=True, patience=training_config.EARLY_STOPPING_PATIENCE,
-                                                 save_path='best_model/',
-                                                 mode="min")
+                                                 save_path=training_config.BEST_MODEL_SAVE_PATH,
+                                                 mode="max")
 
     # train model
     for epoch in range(training_config.NUM_EPOCHS):
@@ -273,21 +298,27 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
         model.eval()
         print("Evaluation of the model on dev set.")
         val_metric_arousal, val_metric_valence, val_metrics_classification = evaluate_model(model, dev_generator, device)
-        metric_value = val_metric_arousal['mse']+val_metric_valence['mse']+(1-val_metrics_classification['recall'])
+        metric_value = (1.-val_metric_arousal['mse'])+(1.-val_metric_valence['mse'])+val_metrics_classification['recall']
+        metric_value = metric_value/3.
+        print("Validation metric (Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification): %.10f" % metric_value)
         # update LR
         if training_config.LR_SCHEDULLER == 'ReduceLRonPlateau':
             lr_scheduller.step(metric_value)
         else:
             lr_scheduller.step()
         # save best model
-        if metric_value < best_val_metric_value:
+        if metric_value > best_val_metric_value:
+            if not os.path.exists(training_config.BEST_MODEL_SAVE_PATH):
+                os.makedirs(training_config.BEST_MODEL_SAVE_PATH)
             best_val_metric_value = metric_value
-            torch.save(model.state_dict(), os.path.join(training_config.BEST_MODEL_SAVE_PATH, 'best_model.pth'))
+            torch.save(model.state_dict(), os.path.join(training_config.BEST_MODEL_SAVE_PATH, 'best_model_early_stopping.pth'))
         # check early stopping
         early_stopping_result = early_stopping_callback(metric_value, model)
         if early_stopping_result:
             print("Early stopping")
             break
+        # unfreeze next n layers
+        layers_unfreezer()
     # clear RAM
     gc.collect()
     torch.cuda.empty_cache()
