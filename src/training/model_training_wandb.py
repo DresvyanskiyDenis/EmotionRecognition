@@ -22,13 +22,13 @@ from src.training.training_utils import calculate_class_weights
 import wandb
 
 
-def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader, device:torch.device) -> Tuple[Dict[object, float],...]:
-
-    evaluation_metrics_classification = { 'accuracy_classification': accuracy_score,
-                                          'precision_classification': partial(precision_score, average='macro'),
-                                          'recall_classification': partial(recall_score, average='macro'),
-                                          'f1_classification': partial(f1_score, average='macro')
-                                        }
+def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
+    Dict[object, float], ...]:
+    evaluation_metrics_classification = {'accuracy_classification': accuracy_score,
+                                         'precision_classification': partial(precision_score, average='macro'),
+                                         'recall_classification': partial(recall_score, average='macro'),
+                                         'f1_classification': partial(f1_score, average='macro')
+                                         }
 
     evaluation_metric_arousal = {'arousal_mse': mean_squared_error,
                                  'arousal_mae': mean_absolute_error
@@ -38,8 +38,8 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
                                  'valence_mae': mean_absolute_error
                                  }
     # create arrays for predictions and ground truth labels
-    predictions_classifier, predictions_arousal, predictions_valence = [],[],[]
-    ground_truth_classifier, ground_truth_arousal, ground_truth_valence = [],[],[]
+    predictions_classifier, predictions_arousal, predictions_valence = [], [], []
+    ground_truth_classifier, ground_truth_arousal, ground_truth_valence = [], [], []
 
     # start evaluation
     model.eval()
@@ -49,7 +49,6 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
             inputs, labels = data
             inputs = inputs.float()
             inputs = inputs.to(device)
-
 
             # forward pass
             outputs = model(inputs)
@@ -61,11 +60,12 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
             classification_output = classification_output.cpu().numpy().squeeze()
             classification_output = np.argmax(classification_output, axis=-1)
             # transform regression output to fit labels
-            regression_output = [regression_output[0].cpu().numpy().squeeze(), regression_output[1].cpu().numpy().squeeze()]
+            regression_output = [regression_output[0].cpu().numpy().squeeze(),
+                                 regression_output[1].cpu().numpy().squeeze()]
 
             # transform ground truth labels to fit predictions and sklearn metrics
-            classification_ground_truth = labels[:,2].cpu().numpy().squeeze()
-            regression_ground_truth = [labels[:,0].cpu().numpy().squeeze(), labels[:,1].cpu().numpy().squeeze()]
+            classification_ground_truth = labels[:, 2].cpu().numpy().squeeze()
+            regression_ground_truth = [labels[:, 0].cpu().numpy().squeeze(), labels[:, 1].cpu().numpy().squeeze()]
 
             # save ground_truth labels and predictions in arrays to calculate metrics afterwards by one time
             predictions_arousal.append(regression_output[0])
@@ -96,9 +96,15 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
         ground_truth_classifier = ground_truth_classifier[mask_classifier]
 
         # calculate evaluation metrics
-        evaluation_metrics_arousal = {metric: evaluation_metric_arousal[metric](ground_truth_arousal, predictions_arousal) for metric in evaluation_metric_arousal}
-        evaluation_metrics_valence = {metric: evaluation_metric_valence[metric](ground_truth_valence, predictions_valence) for metric in evaluation_metric_valence}
-        evaluation_metrics_classifier = {metric: evaluation_metrics_classification[metric](ground_truth_classifier, predictions_classifier) for metric in evaluation_metrics_classification}
+        evaluation_metrics_arousal = {
+            metric: evaluation_metric_arousal[metric](ground_truth_arousal, predictions_arousal) for metric in
+            evaluation_metric_arousal}
+        evaluation_metrics_valence = {
+            metric: evaluation_metric_valence[metric](ground_truth_valence, predictions_valence) for metric in
+            evaluation_metric_valence}
+        evaluation_metrics_classifier = {
+            metric: evaluation_metrics_classification[metric](ground_truth_classifier, predictions_classifier) for
+            metric in evaluation_metrics_classification}
         # print evaluation metrics
         print('Evaluation metrics for arousal:')
         for metric_name, metric_value in evaluation_metrics_arousal.items():
@@ -112,9 +118,9 @@ def evaluate_model(model:torch.nn.Module, generator:torch.utils.data.DataLoader,
     return (evaluation_metrics_arousal, evaluation_metrics_valence, evaluation_metrics_classifier)
 
 
-def train_step(model:torch.nn.Module, criterion:Tuple[torch.nn.Module,...],
-               inputs:Tuple[torch.Tensor,...], ground_truths:List[torch.Tensor],
-               device:torch.device) -> List:
+def train_step(model: torch.nn.Module, criterion: Tuple[torch.nn.Module, ...],
+               inputs: Tuple[torch.Tensor, ...], ground_truths: List[torch.Tensor],
+               device: torch.device) -> List:
     """ Performs one training step for a model.
 
     :param model: torch.nn.Module
@@ -132,7 +138,7 @@ def train_step(model:torch.nn.Module, criterion:Tuple[torch.nn.Module,...],
     """
     # forward pass
     outputs = model(inputs)
-    regression_output = [outputs[1][:,0], outputs[1][:, 1]]
+    regression_output = [outputs[1][:, 0], outputs[1][:, 1]]
     classification_output = outputs[0]
     # criterions with indices 0 and 1 are for regression, 2 - for classification
     regression_criterion = criterion[0:2]
@@ -168,12 +174,11 @@ def train_step(model:torch.nn.Module, criterion:Tuple[torch.nn.Module,...],
     return losses
 
 
-
-def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoader,
-               optimizer:torch.optim.Optimizer, criterions:Tuple[torch.nn.Module,...],
-               device:torch.device, print_step:int=100,
-               accumulate_gradients:Optional[int]=1,
-               warmup_lr_scheduller:Optional[object]=None)->float:
+def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLoader,
+                optimizer: torch.optim.Optimizer, criterions: Tuple[torch.nn.Module, ...],
+                device: torch.device, print_step: int = 100,
+                accumulate_gradients: Optional[int] = 1,
+                warmup_lr_scheduller: Optional[object] = None) -> float:
     """ Performs one epoch of training for a model.
 
     :param model: torch.nn.Module
@@ -207,7 +212,6 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
         inputs = inputs.float()
         inputs = inputs.to(device)
 
-
         # do train step
         with torch.set_grad_enabled(True):
             # form indecex of labels which should be one-hot encoded
@@ -234,8 +238,8 @@ def train_epoch(model:torch.nn.Module, train_generator:torch.utils.data.DataLoad
     return total_loss / counter
 
 
-def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch.utils.data.DataLoader,
-                class_weights:torch.Tensor) -> None:
+def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader,
+                class_weights: torch.Tensor) -> None:
     # metaparams
     metaparams = {
         # general params
@@ -270,9 +274,6 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     config = wandb.config
     config.dir = wandb.run.dir
 
-
-
-
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
@@ -283,7 +284,8 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
                   'SGD': torch.optim.SGD,
                   'RMSprop': torch.optim.RMSprop,
                   'AdamW': torch.optim.AdamW}
-    optimizer = optimizers[config.OPTIMIZER](model.parameters(), lr=config.LR_MAX_CYCLIC, weight_decay=config.WEIGHT_DECAY)
+    optimizer = optimizers[config.OPTIMIZER](model.parameters(), lr=config.LR_MAX_CYCLIC,
+                                             weight_decay=config.WEIGHT_DECAY)
     # Loss functions
     class_weights = class_weights.to(device)
     criterions = (torch.nn.MSELoss(), torch.nn.MSELoss(), SoftFocalLoss(softmax=True, alpha=class_weights, gamma=2))
@@ -295,33 +297,34 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
         'Cyclic': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.ANNEALING_PERIOD,
                                                              eta_min=config.LR_MIN_CYCLIC),
         'ReduceLRonPlateau': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=8),
-        'Warmup_cyclic' : WarmUpScheduler(optimizer=optimizer,
-                                          lr_scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                             T_max=config.ANNEALING_PERIOD,
-                                                             eta_min=config.LR_MIN_CYCLIC),
-                                         len_loader = len(train_generator),
-                                          warmup_steps=config.WARMUP_STEPS,
-                                          warmup_start_lr = config.LR_MIN_WARMUP,
-                                          warmup_mode = config.WARMUP_MODE)
+        'Warmup_cyclic': WarmUpScheduler(optimizer=optimizer,
+                                         lr_scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                                                                 T_max=config.ANNEALING_PERIOD,
+                                                                                                 eta_min=config.LR_MIN_CYCLIC),
+                                         len_loader=len(train_generator),
+                                         warmup_steps=config.WARMUP_STEPS,
+                                         warmup_start_lr=config.LR_MIN_WARMUP,
+                                         warmup_mode=config.WARMUP_MODE)
     }
     lr_scheduller = lr_schedullers[config.LR_SCHEDULLER]
     # if lr_scheduller is warmup_cyclic, we need to change the learning rate of optimizer
     if config.LR_SCHEDULLER == 'Warmup_cyclic':
         optimizer.param_groups[0]['lr'] = config.LR_MIN_WARMUP
     # callbacks
-        # layers unfreezer
+    # layers unfreezer
     layers_for_unfreezing = [
         *list(list(list(model.children())[0].children())[0].children()),
         *list(list(model.children())[0].children())[1:],
         *list(model.children())[1:]
     ]
-    layers_unfreezer = GradualLayersUnfreezer(model=model, layers = layers_for_unfreezing,
+    layers_unfreezer = GradualLayersUnfreezer(model=model, layers=layers_for_unfreezing,
                                               layers_per_epoch=config.UNFREEZING_LAYERS_PER_EPOCH,
                                               layers_to_unfreeze_before_start=config.LAYERS_TO_UNFREEZE_BEFORE_START,
-                                              input_shape=(config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0], training_config.IMAGE_RESOLUTION[1]),
+                                              input_shape=(config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
+                                                           training_config.IMAGE_RESOLUTION[1]),
                                               verbose=True)
-        # early stopping
-    best_val_metric_value = -np.inf # we do maximization
+    # early stopping
+    best_val_metric_value = -np.inf  # we do maximization
     early_stopping_callback = TorchEarlyStopping(verbose=True, patience=config.EARLY_STOPPING_PATIENCE,
                                                  save_path=config.BEST_MODEL_SAVE_PATH,
                                                  mode="max")
@@ -331,17 +334,21 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
         print("Epoch: %i" % epoch)
         # train
         model.train()
-        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=100)
+        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=50,
+                                 accumulate_gradients=training_config.ACCUMULATE_GRADIENTS,
+                                 warmup_lr_scheduller=lr_scheduller if config.LR_SCHEDULLER == 'Warmup_cyclic' else None)
         print("Train loss: %.10f" % train_loss)
         # validate
         model.eval()
         print("Evaluation of the model on dev set.")
-        val_metric_arousal, val_metric_valence, val_metrics_classification = evaluate_model(model, dev_generator, device)
-        metric_value = (1.-val_metric_arousal['arousal_mse'])+\
-                       (1.-val_metric_valence['valence_mse'])+\
+        val_metric_arousal, val_metric_valence, val_metrics_classification = evaluate_model(model, dev_generator,
+                                                                                            device)
+        metric_value = (1. - val_metric_arousal['arousal_mse']) + \
+                       (1. - val_metric_valence['valence_mse']) + \
                        val_metrics_classification['recall_classification']
-        metric_value = metric_value/3.
-        print("Validation metric (Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification): %.10f" % metric_value)
+        metric_value = metric_value / 3.
+        print(
+            "Validation metric (Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification): %.10f" % metric_value)
         # log everything using wandb
         wandb.log({'epoch': epoch}, commit=False)
         wandb.log({'learning_rate': optimizer.param_groups[0]["lr"]}, commit=False)
@@ -352,7 +359,7 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
         # update LR
         if config.LR_SCHEDULLER == 'ReduceLRonPlateau':
             lr_scheduller.step(metric_value)
-        else:
+        elif config.LR_SCHEDULLER == 'Cyclic':
             lr_scheduller.step()
 
         # save best model
@@ -373,18 +380,16 @@ def train_model(train_generator:torch.utils.data.DataLoader, dev_generator:torch
     torch.cuda.empty_cache()
 
 
-
 def main():
     print("Start of the script....")
 
     # get data loaders
-    (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(return_class_weights=True)
+    (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
+        return_class_weights=True)
     # train model
     train_model(train_generator=train_generator, dev_generator=dev_generator,
-    class_weights=class_weights)
-
+                class_weights=class_weights)
 
 
 if __name__ == "__main__":
     main()
-
