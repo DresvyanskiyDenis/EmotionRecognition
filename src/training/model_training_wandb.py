@@ -11,34 +11,30 @@ import torch
 from sklearn.metrics import recall_score, precision_score, f1_score, accuracy_score, mean_squared_error, \
     mean_absolute_error
 from torch.nn.functional import one_hot
-from torchinfo import summary
 
 import training_config
-from decorators.common_decorators import timer
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer
 from pytorch_utils.training_utils.losses import SoftFocalLoss
-from pytorch_utils.models.ViT_models import ViT_Deit_model
 from src.training.data_preparation import load_data_and_construct_dataloaders
-from src.training.training_utils import calculate_class_weights
 import wandb
 
 
 def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
     Dict[object, float], ...]:
-    evaluation_metrics_classification = {'accuracy_classification': accuracy_score,
-                                         'precision_classification': partial(precision_score, average='macro'),
-                                         'recall_classification': partial(recall_score, average='macro'),
-                                         'f1_classification': partial(f1_score, average='macro')
+    evaluation_metrics_classification = {'val_accuracy_classification': accuracy_score,
+                                         'val_precision_classification': partial(precision_score, average='macro'),
+                                         'val_recall_classification': partial(recall_score, average='macro'),
+                                         'val_f1_classification': partial(f1_score, average='macro')
                                          }
 
-    evaluation_metric_arousal = {'arousal_mse': mean_squared_error,
-                                 'arousal_mae': mean_absolute_error
+    evaluation_metric_arousal = {'val_arousal_mse': mean_squared_error,
+                                 'val_arousal_mae': mean_absolute_error
                                  }
 
-    evaluation_metric_valence = {'valence_mse': mean_squared_error,
-                                 'valence_mae': mean_absolute_error
+    evaluation_metric_valence = {'val_valence_mse': mean_squared_error,
+                                 'val_valence_mae': mean_absolute_error
                                  }
     # create arrays for predictions and ground truth labels
     predictions_classifier, predictions_arousal, predictions_valence = [], [], []
@@ -275,7 +271,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     # initialization of Weights and Biases
     wandb.init(project="Emotion_recognition_F2F", config=metaparams)
     config = wandb.config
-    config.dir = wandb.run.dir
+    wandb.config.update({'BEST_MODEL_SAVE_PATH':wandb.run.dir}, allow_val_change=True)
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -292,9 +288,6 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     # Loss functions
     class_weights = class_weights.to(device)
     criterions = (torch.nn.MSELoss(), torch.nn.MSELoss(), SoftFocalLoss(softmax=True, alpha=class_weights, gamma=2))
-    wandb.config.update({'loss_arousal': criterions[0]})
-    wandb.config.update({'loss_valence': criterions[1]})
-    wandb.config.update({'loss_classification': criterions[2]})
     # create LR scheduler
     lr_schedullers = {
         'Cyclic': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.ANNEALING_PERIOD,
@@ -328,6 +321,9 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                               verbose=True)
     # early stopping
     best_val_metric_value = -np.inf  # we do maximization
+    best_val_mse_arousal = np.inf
+    best_val_mse_valence = np.inf
+    best_val_recall_classification = 0
     early_stopping_callback = TorchEarlyStopping(verbose=True, patience=config.EARLY_STOPPING_PATIENCE,
                                                  save_path=config.BEST_MODEL_SAVE_PATH,
                                                  mode="max")
@@ -335,31 +331,47 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     # train model
     for epoch in range(config.NUM_EPOCHS):
         print("Epoch: %i" % epoch)
-        # train
+        # train the model
         model.train()
-        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=50,
+        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=100,
                                  accumulate_gradients=training_config.ACCUMULATE_GRADIENTS,
                                  warmup_lr_scheduller=lr_scheduller if config.LR_SCHEDULLER == 'Warmup_cyclic' else None)
         print("Train loss: %.10f" % train_loss)
-        # validate
+
+        # validate the model
         model.eval()
         print("Evaluation of the model on dev set.")
         val_metric_arousal, val_metric_valence, val_metrics_classification = evaluate_model(model, dev_generator,
                                                                                             device)
-        metric_value = (1. - val_metric_arousal['arousal_mse']) + \
-                       (1. - val_metric_valence['valence_mse']) + \
-                       val_metrics_classification['recall_classification']
+
+        # update best val metrics got on validation set and log them using wandb
+        if val_metric_arousal['val_arousal_mse'] < best_val_mse_arousal:
+            best_val_mse_arousal = val_metric_arousal['val_arousal_mse']
+            wandb.config.update({'best_val_mse_arousal': best_val_mse_arousal}, allow_val_change=True)
+        if val_metric_valence['val_valence_mse'] < best_val_mse_valence:
+            best_val_mse_valence = val_metric_valence['val_valence_mse']
+            wandb.config.update({'best_val_mse_valence': best_val_mse_valence}, allow_val_change=True)
+        if val_metrics_classification['val_recall_classification'] > best_val_recall_classification:
+            best_val_recall_classification = val_metrics_classification['val_recall_classification']
+            wandb.config.update({'best_val_recall_classification': best_val_recall_classification}, allow_val_change=True)
+
+        # calculate general metric as average of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification
+        metric_value = (1. - val_metric_arousal['val_arousal_mse']) + \
+                       (1. - val_metric_valence['val_valence_mse']) + \
+                       val_metrics_classification['val_recall_classification']
         metric_value = metric_value / 3.
-        print(
-            "Validation metric (Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification): %.10f" % metric_value)
+        print("Validation metric (Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification): %.10f" % metric_value)
+
         # log everything using wandb
         wandb.log({'epoch': epoch}, commit=False)
         wandb.log({'learning_rate': optimizer.param_groups[0]["lr"]}, commit=False)
         wandb.log(val_metric_arousal, commit=False)
         wandb.log(val_metric_valence, commit=False)
         wandb.log(val_metrics_classification, commit=False)
-        wandb.log({'train_loss': train_loss})
-        # update LR
+        wandb.log({'val_general_metric': metric_value}, commit=False)
+
+        wandb.log({'train_loss (mse+mse+crossentropy)': train_loss})
+        # update LR if needed
         if config.LR_SCHEDULLER == 'ReduceLRonPlateau':
             lr_scheduller.step(metric_value)
         elif config.LR_SCHEDULLER == 'Cyclic':
@@ -370,7 +382,9 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
             if not os.path.exists(config.BEST_MODEL_SAVE_PATH):
                 os.makedirs(config.BEST_MODEL_SAVE_PATH)
             best_val_metric_value = metric_value
-            torch.save(model.state_dict(), os.path.join(config.BEST_MODEL_SAVE_PATH, 'best_model_early_stopping.pth'))
+            wandb.config.update({'best_val_metric_value\n(Average sum of (1.-MSE_arousal), (1.-MSE_valence), and RECALL_classification)':
+                                     best_val_metric_value}, allow_val_change=True)
+            torch.save(model.state_dict(), os.path.join(config.BEST_MODEL_SAVE_PATH, 'best_model_metric.pth'))
         # check early stopping
         early_stopping_result = early_stopping_callback(metric_value, model)
         if early_stopping_result:
