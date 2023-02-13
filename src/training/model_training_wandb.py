@@ -15,7 +15,7 @@ from torch.nn.functional import one_hot
 import training_config
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
-from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer
+from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer, gradually_decrease_lr
 from pytorch_utils.training_utils.losses import SoftFocalLoss
 from src.training.data_preparation import load_data_and_construct_dataloaders
 import wandb
@@ -265,8 +265,16 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         "WARMUP_STEPS": training_config.WARMUP_STEPS,
         "WARMUP_MODE": training_config.WARMUP_MODE,
         # gradual unfreezing (if applied)
+        "GRADUAL_UNFREEZING": training_config.GRADUAL_UNFREEZING,
         "UNFREEZING_LAYERS_PER_EPOCH": training_config.UNFREEZING_LAYERS_PER_EPOCH,
         "LAYERS_TO_UNFREEZE_BEFORE_START": training_config.LAYERS_TO_UNFREEZE_BEFORE_START,
+        # discriminative learning
+        "DISCRIMINATIVE_LEARNING": training_config.DISCRIMINATIVE_LEARNING,
+        "DISCRIMINATIVE_LEARNING_INITIAL_LR": training_config.DISCRIMINATIVE_LEARNING_INITIAL_LR,
+        "DISCRIMINATIVE_LEARNING_MINIMAL_LR": training_config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
+        "DISCRIMINATIVE_LEARNING_MULTIPLICATOR": training_config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR,
+        "DISCRIMINATIVE_LEARNING_STEP": training_config.DISCRIMINATIVE_LEARNING_STEP,
+        "DISCRIMINATIVE_LEARNING_START_LAYER": training_config.DISCRIMINATIVE_LEARNING_START_LAYER,
     }
     # initialization of Weights and Biases
     wandb.init(project="Emotion_recognition_F2F", config=metaparams)
@@ -278,12 +286,38 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
                                        num_regression_neurons=config.NUM_REGRESSION_NEURONS)
     model = model.to(device)
+
+    # define all model layers (params), which will be used by optimizer
+    model_layers = [
+        *list(list(list(model.children())[0].children())[0].children()),
+        *list(list(model.children())[0].children())[1:],
+        *list(model.children())[1:]
+    ]
+    # layers unfreezer
+    if config.GRADUAL_UNFREEZING:
+        layers_unfreezer = GradualLayersUnfreezer(model=model, layers=model_layers,
+                                                  layers_per_epoch=config.UNFREEZING_LAYERS_PER_EPOCH,
+                                                  layers_to_unfreeze_before_start=config.LAYERS_TO_UNFREEZE_BEFORE_START,
+                                                  input_shape=(config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
+                                                               training_config.IMAGE_RESOLUTION[1]),
+                                                  verbose=True)
+    # if discriminative learning is applied
+    if config.DISCRIMINATIVE_LEARNING:
+        model_parameters = gradually_decrease_lr(layers=model_layers, initial_lr=config.DISCRIMINATIVE_LEARNING_INITIAL_LR,
+                          multiplicator=config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR, minimal_lr=config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
+                          step=config.DISCRIMINATIVE_LEARNING_STEP, start_layer=config.DISCRIMINATIVE_LEARNING_START_LAYER)
+        print('The learning rate was changed for each layer according to discriminative learning approach. The new learning rates are:')
+        for layer in model_parameters:
+            print(layer['params'][0].name, layer['lr'])
+    else:
+        model_parameters = model.parameters()
+
     # select optimizer
     optimizers = {'Adam': torch.optim.Adam,
                   'SGD': torch.optim.SGD,
                   'RMSprop': torch.optim.RMSprop,
                   'AdamW': torch.optim.AdamW}
-    optimizer = optimizers[config.OPTIMIZER](model.parameters(), lr=config.LR_MAX_CYCLIC,
+    optimizer = optimizers[config.OPTIMIZER](model_parameters, lr=config.LR_MAX_CYCLIC,
                                              weight_decay=config.WEIGHT_DECAY)
     # Loss functions
     class_weights = class_weights.to(device)
@@ -302,23 +336,15 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                          warmup_start_lr=config.LR_MIN_WARMUP,
                                          warmup_mode=config.WARMUP_MODE)
     }
-    lr_scheduller = lr_schedullers[config.LR_SCHEDULLER]
-    # if lr_scheduller is warmup_cyclic, we need to change the learning rate of optimizer
-    if config.LR_SCHEDULLER == 'Warmup_cyclic':
-        optimizer.param_groups[0]['lr'] = config.LR_MIN_WARMUP
-    # callbacks
-    # layers unfreezer
-    layers_for_unfreezing = [
-        *list(list(list(model.children())[0].children())[0].children()),
-        *list(list(model.children())[0].children())[1:],
-        *list(model.children())[1:]
-    ]
-    layers_unfreezer = GradualLayersUnfreezer(model=model, layers=layers_for_unfreezing,
-                                              layers_per_epoch=config.UNFREEZING_LAYERS_PER_EPOCH,
-                                              layers_to_unfreeze_before_start=config.LAYERS_TO_UNFREEZE_BEFORE_START,
-                                              input_shape=(config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
-                                                           training_config.IMAGE_RESOLUTION[1]),
-                                              verbose=True)
+    # if we use discriminative learning, we don't need LR scheduler
+    if config.DISCRIMINATIVE_LEARNING:
+        lr_scheduller = None
+    else:
+        lr_scheduller = lr_schedullers[config.LR_SCHEDULLER]
+        # if lr_scheduller is warmup_cyclic, we need to change the learning rate of optimizer
+        if config.LR_SCHEDULLER == 'Warmup_cyclic':
+            optimizer.param_groups[0]['lr'] = config.LR_MIN_WARMUP
+
     # early stopping
     best_val_metric_value = -np.inf  # we do maximization
     best_val_mse_arousal = np.inf
@@ -369,7 +395,6 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         wandb.log(val_metric_valence, commit=False)
         wandb.log(val_metrics_classification, commit=False)
         wandb.log({'val_general_metric': metric_value}, commit=False)
-
         wandb.log({'train_loss (mse+mse+crossentropy)': train_loss})
         # update LR if needed
         if config.LR_SCHEDULLER == 'ReduceLRonPlateau':
@@ -391,7 +416,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
             print("Early stopping")
             break
         # unfreeze next n layers
-        layers_unfreezer()
+        if config.GRADUAL_UNFREEZING:
+            layers_unfreezer()
     # clear RAM
     gc.collect()
     torch.cuda.empty_cache()
