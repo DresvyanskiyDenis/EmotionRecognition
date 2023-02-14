@@ -67,6 +67,7 @@ def validate_model_modified_MobileNetV3(model:torch.nn.Module, data_loader:torch
             regression_output = [regression_output[0].cpu().numpy().squeeze(),
                                  regression_output[1].cpu().numpy().squeeze()]
 
+
             # transform ground truth labels to fit predictions and sklearn metrics
             classification_ground_truth = labels[:, 2].cpu().numpy().squeeze()
             regression_ground_truth = [labels[:, 0].cpu().numpy().squeeze(), labels[:, 1].cpu().numpy().squeeze()]
@@ -119,7 +120,10 @@ def validate_model_modified_MobileNetV3(model:torch.nn.Module, data_loader:torch
         print('Evaluation metrics for classifier:')
         for metric_name, metric_value in evaluation_metrics_classifier.items():
             print("%s: %.4f" % (metric_name, metric_value))
-    return evaluation_metrics_arousal, evaluation_metrics_valence, evaluation_metrics_classifier
+        general_val_metric = ((1.-evaluation_metrics_arousal['val_arousal_mae']) + (1.-evaluation_metrics_valence[
+            'val_valence_mae']) + evaluation_metrics_classifier['val_recall_classification'])/3.
+        print('General validation metric: %.4f' % general_val_metric)
+    return evaluation_metrics_arousal, evaluation_metrics_valence, evaluation_metrics_classifier, general_val_metric
 
 
 
@@ -127,18 +131,18 @@ def validate_model_modified_MobileNetV3(model:torch.nn.Module, data_loader:torch
 def validate_modified_MobileNetV3_on_AffectNet():
     # TODO: check this function and the validation one
     # load pd.DataFrames
-    train, dev, test = load_all_dataframes()
+    train, dev, test = load_all_dataframes(training_config.splitting_seed)
     # define preprocessing functions
     preprocessing_functions = [resize_image_to_224_saving_aspect_ratio,
                                preprocess_image_MobileNetV3]
     # take only AffectNet data
-    train = train[train['path'].str.contains('AffectNet')]
-    dev = dev[dev['path'].str.contains('AffectNet')]
+    #train = train[train['path'].str.contains('AffectNet')]
+    #dev = dev[dev['path'].str.contains('AffectNet')]
     # construct data loaders
     train_dataloader, dev_dataloader, test_dataloader = construct_data_loaders(train, dev, test,
                                                                                preprocessing_functions,
                                                                                augmentation_functions=None,
-                                                                               num_workers=8)
+                                                                               num_workers=16)
     # clear RAM
     del test, test_dataloader
     del train, train_dataloader
@@ -146,13 +150,18 @@ def validate_modified_MobileNetV3_on_AffectNet():
 
     # load model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    path_to_weights = 'FILL_IN'
+    path_to_weights = '/work/home/dsu/emotion_recognition_project/best_model_metric.pth'
     model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=training_config.NUM_CLASSES,
                                        num_regression_neurons=training_config.NUM_REGRESSION_NEURONS)
-    model = model.to(device)
     model.load_state_dict(torch.load(path_to_weights))
+    model = model.to(device)
+    model.eval()
     # evaluate model
-    metrics_arousal, metrics_valence, metrics_classifier = validate_model_modified_MobileNetV3(model, dev_dataloader, device)
+    metrics_arousal, metrics_valence, metrics_classifier, general_val_metric = validate_model_modified_MobileNetV3(model, dev_dataloader, device)
+
+
+if __name__ == '__main__':
+    validate_modified_MobileNetV3_on_AffectNet()
 
 
 
