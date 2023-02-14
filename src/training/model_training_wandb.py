@@ -307,11 +307,12 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                           multiplicator=config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR, minimal_lr=config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
                           step=config.DISCRIMINATIVE_LEARNING_STEP, start_layer=config.DISCRIMINATIVE_LEARNING_START_LAYER)
         print('The learning rate was changed for each layer according to discriminative learning approach. The new learning rates are:')
+        counter = 0
         for layer in model_parameters:
-            print(layer['params'][0].name, layer['lr'])
+            print("counter:", counter, "params:", layer['params'].shape, 'lr:', layer['lr'])
+            counter += 1
     else:
         model_parameters = model.parameters()
-
     # select optimizer
     optimizers = {'Adam': torch.optim.Adam,
                   'SGD': torch.optim.SGD,
