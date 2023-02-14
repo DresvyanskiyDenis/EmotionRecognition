@@ -239,6 +239,8 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
 
 def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader,
                 class_weights: torch.Tensor) -> None:
+    print("Start of the model training. Gradual_unfreezing:%s, Discriminative_lr:%s" % (training_config.GRADUAL_UNFREEZING,
+                                                                                       training_config.DISCRIMINATIVE_LEARNING))
     # metaparams
     metaparams = {
         # general params
@@ -332,7 +334,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                          lr_scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                                                  T_max=config.ANNEALING_PERIOD,
                                                                                                  eta_min=config.LR_MIN_CYCLIC),
-                                         len_loader=len(train_generator),
+                                         len_loader=len(train_generator)//training_config.ACCUMULATE_GRADIENTS,
                                          warmup_steps=config.WARMUP_STEPS,
                                          warmup_start_lr=config.LR_MIN_WARMUP,
                                          warmup_mode=config.WARMUP_MODE)
@@ -376,7 +378,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
             best_val_rmse_arousal = val_metric_arousal['val_arousal_rmse']
             wandb.config.update({'best_val_rmse_arousal': best_val_rmse_arousal}, allow_val_change=True)
         if val_metric_valence['val_valence_rmse'] < best_val_rmse_valence:
-            best_val_rmse_valence = val_metric_valence['val_valence_mse']
+            best_val_rmse_valence = val_metric_valence['val_valence_rmse']
             wandb.config.update({'best_val_rmse_valence': best_val_rmse_valence}, allow_val_change=True)
         if val_metrics_classification['val_recall_classification'] > best_val_recall_classification:
             best_val_recall_classification = val_metrics_classification['val_recall_classification']
@@ -420,17 +422,29 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         if config.GRADUAL_UNFREEZING:
             layers_unfreezer()
     # clear RAM
+    del model
     gc.collect()
     torch.cuda.empty_cache()
 
 
 def main():
     print("Start of the script....")
-
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
         return_class_weights=True)
-    # train model
+    # with gradual unfreezing, withouth discriminative learning
+    training_config.GRADUAL_UNFREEZING = True
+    training_config.DISCRIMINATIVE_LEARNING = False
+    train_model(train_generator=train_generator, dev_generator=dev_generator,
+                class_weights=class_weights)
+    # with discriminative learning, without gradual unfreezing
+    training_config.GRADUAL_UNFREEZING = False
+    training_config.DISCRIMINATIVE_LEARNING = True
+    train_model(train_generator=train_generator, dev_generator=dev_generator,
+                class_weights=class_weights)
+    # with discriminative learning and gradual unfreezing
+    training_config.GRADUAL_UNFREEZING = True
+    training_config.DISCRIMINATIVE_LEARNING = True
     train_model(train_generator=train_generator, dev_generator=dev_generator,
                 class_weights=class_weights)
 
