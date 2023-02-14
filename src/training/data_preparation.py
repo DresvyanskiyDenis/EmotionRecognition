@@ -25,7 +25,8 @@ DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-
 
 
 
-def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages:Tuple[int,int,int])->List[pd.DataFrame]:
+def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages:Tuple[int,int,int],
+                                      seed:int=42)->List[pd.DataFrame]:
     # get unique filenames (videos)
     filenames_labels = filenames_labels.copy().dropna()
     filenames_labels['path'] = filenames_labels['path'].astype(str)
@@ -49,7 +50,7 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     if num_train + num_dev + num_test != len(filenames_dict):
         raise ValueError("One or more entities in the filename_dict have been lost during splitting.")
     # get random filenames for each set
-    indicies = np.random.permutation(len(filenames_dict))
+    indicies = np.random.RandomState(seed=seed).permutation(len(filenames_dict))
     train_filenames = filenames[indicies[:num_train]]
     dev_filenames = filenames[indicies[num_train:num_train+num_dev]]
     test_filenames = filenames[indicies[num_train+num_dev:]]
@@ -66,7 +67,7 @@ def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->dict:
 
 
 
-def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
      Loads all dataframes for the datasets AFEW-VA, AffectNet, RECOLA, SEMAINE, and SEWA, and split them into
         train, dev, and test sets.
@@ -103,10 +104,10 @@ def load_all_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     # splitting to train, development, and test sets
     percentages = (80, 10, 10)
-    AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages)
-    RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages)
-    SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages)
-    SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages)
+    AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages, seed=seed)
+    RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages, seed=seed)
+    SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages, seed=seed)
+    SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages, seed=seed)
     # add NaN values to 'category' column for the datasets that do not have it
     AFEW_VA_train['category'], AFEW_VA_dev['category'], AFEW_VA_test['category'] = np.NaN, np.NaN, np.NaN
     RECOLA_train['category'], RECOLA_dev['category'], RECOLA_test['category'] = np.NaN, np.NaN, np.NaN
@@ -249,9 +250,9 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
     test_data_loader = ImageDataLoader(paths_with_labels=test, preprocessing_functions=preprocessing_functions,
                     augmentation_functions=None, shuffle=False)
 
-    train_dataloader = DataLoader(train_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers)
-    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//2)
-    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//4)
+    train_dataloader = DataLoader(train_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers, shuffle=True)
+    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//2, shuffle=False)
+    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//4, shuffle=False)
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 
@@ -274,7 +275,7 @@ def load_data_and_construct_dataloaders(return_class_weights:Optional[bool]=Fals
 
     """
     # load pd.DataFrames
-    train, dev, test = load_all_dataframes()
+    train, dev, test = load_all_dataframes(training_config.splitting_seed)
     # define preprocessing functions
     preprocessing_functions = [resize_image_to_224_saving_aspect_ratio,
                                preprocess_image_MobileNetV3]
