@@ -40,6 +40,7 @@ DISCRIMINATIVE_LEARNING_START_LAYER:int = -7
 BEST_MODEL_SAVE_PATH:str = "best_models/"
 NUM_WORKERS:int = 16
 ACCUMULATE_GRADIENTS:int = 4
+splitting_seed:int = 101095
 
 
 
