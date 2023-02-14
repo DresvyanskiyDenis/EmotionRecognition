@@ -238,9 +238,10 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
 
 
 def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader,
-                class_weights: torch.Tensor) -> None:
-    print("Start of the model training. Gradual_unfreezing:%s, Discriminative_lr:%s" % (training_config.GRADUAL_UNFREEZING,
-                                                                                       training_config.DISCRIMINATIVE_LEARNING))
+                class_weights: torch.Tensor, GRADUAL_UNFREEZING:Optional[bool]=False,
+                DISCRIMINATIVE_LEARNING:Optional[bool]=False) -> None:
+    print("Start of the model training. Gradual_unfreezing:%s, Discriminative_lr:%s" % (GRADUAL_UNFREEZING,
+                                                                                       DISCRIMINATIVE_LEARNING))
     # metaparams
     metaparams = {
         # general params
@@ -267,11 +268,11 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         "WARMUP_STEPS": training_config.WARMUP_STEPS,
         "WARMUP_MODE": training_config.WARMUP_MODE,
         # gradual unfreezing (if applied)
-        "GRADUAL_UNFREEZING": training_config.GRADUAL_UNFREEZING,
+        "GRADUAL_UNFREEZING": GRADUAL_UNFREEZING,
         "UNFREEZING_LAYERS_PER_EPOCH": training_config.UNFREEZING_LAYERS_PER_EPOCH,
         "LAYERS_TO_UNFREEZE_BEFORE_START": training_config.LAYERS_TO_UNFREEZE_BEFORE_START,
         # discriminative learning
-        "DISCRIMINATIVE_LEARNING": training_config.DISCRIMINATIVE_LEARNING,
+        "DISCRIMINATIVE_LEARNING": DISCRIMINATIVE_LEARNING,
         "DISCRIMINATIVE_LEARNING_INITIAL_LR": training_config.DISCRIMINATIVE_LEARNING_INITIAL_LR,
         "DISCRIMINATIVE_LEARNING_MINIMAL_LR": training_config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
         "DISCRIMINATIVE_LEARNING_MULTIPLICATOR": training_config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR,
@@ -296,7 +297,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         *list(model.children())[1:]
     ]
     # layers unfreezer
-    if config.GRADUAL_UNFREEZING:
+    if GRADUAL_UNFREEZING:
         layers_unfreezer = GradualLayersUnfreezer(model=model, layers=model_layers,
                                                   layers_per_epoch=config.UNFREEZING_LAYERS_PER_EPOCH,
                                                   layers_to_unfreeze_before_start=config.LAYERS_TO_UNFREEZE_BEFORE_START,
@@ -304,15 +305,11 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                                                training_config.IMAGE_RESOLUTION[1]),
                                                   verbose=True)
     # if discriminative learning is applied
-    if config.DISCRIMINATIVE_LEARNING:
+    if DISCRIMINATIVE_LEARNING:
         model_parameters = gradually_decrease_lr(layers=model_layers, initial_lr=config.DISCRIMINATIVE_LEARNING_INITIAL_LR,
                           multiplicator=config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR, minimal_lr=config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
                           step=config.DISCRIMINATIVE_LEARNING_STEP, start_layer=config.DISCRIMINATIVE_LEARNING_START_LAYER)
         print('The learning rate was changed for each layer according to discriminative learning approach. The new learning rates are:')
-        counter = 0
-        for layer in model_parameters:
-            print("counter:", counter, "params:", layer['params'].shape, 'lr:', layer['lr'])
-            counter += 1
     else:
         model_parameters = model.parameters()
     # select optimizer
@@ -340,7 +337,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                          warmup_mode=config.WARMUP_MODE)
     }
     # if we use discriminative learning, we don't need LR scheduler
-    if config.DISCRIMINATIVE_LEARNING:
+    if DISCRIMINATIVE_LEARNING:
         lr_scheduller = None
     else:
         lr_scheduller = lr_schedullers[config.LR_SCHEDULLER]
@@ -419,7 +416,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
             print("Early stopping")
             break
         # unfreeze next n layers
-        if config.GRADUAL_UNFREEZING:
+        if GRADUAL_UNFREEZING:
             layers_unfreezer()
     # clear RAM
     del model
@@ -432,21 +429,24 @@ def main():
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
         return_class_weights=True)
-    # with gradual unfreezing, withouth discriminative learning
-    training_config.GRADUAL_UNFREEZING = True
-    training_config.DISCRIMINATIVE_LEARNING = False
-    train_model(train_generator=train_generator, dev_generator=dev_generator,
-                class_weights=class_weights)
-    # with discriminative learning, without gradual unfreezing
-    training_config.GRADUAL_UNFREEZING = False
-    training_config.DISCRIMINATIVE_LEARNING = True
-    train_model(train_generator=train_generator, dev_generator=dev_generator,
-                class_weights=class_weights)
-    # with discriminative learning and gradual unfreezing
-    training_config.GRADUAL_UNFREEZING = True
-    training_config.DISCRIMINATIVE_LEARNING = True
-    train_model(train_generator=train_generator, dev_generator=dev_generator,
-                class_weights=class_weights)
+    # train the model
+    train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,
+                GRADUAL_UNFREEZING=True, DISCRIMINATIVE_LEARNING=False)
+    print("End of the training...")
+    print("----------------------------------")
+    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
+                GRADUAL_UNFREEZING=False, DISCRIMINATIVE_LEARNING=True)
+    print("End of the training...")
+    print("----------------------------------")
+    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
+                GRADUAL_UNFREEZING=True, DISCRIMINATIVE_LEARNING=True)
+    print("End of the training...")
+    print("----------------------------------")
+    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
+                GRADUAL_UNFREEZING=False, DISCRIMINATIVE_LEARNING=False)
+    print("End of the training...")
+    print("----------------------------------")
+
 
 
 if __name__ == "__main__":
