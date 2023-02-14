@@ -6,7 +6,7 @@ NUM_REGRESSION_NEURONS:int = 2
 IMAGE_RESOLUTION:Tuple[int, int] = (224, 224)
 
 # training metaparams
-NUM_EPOCHS:int = 1
+NUM_EPOCHS:int = 100
 BATCH_SIZE:int = 128
 OPTIMIZER:str = "AdamW"
 AUGMENT_PROB:float = 0.05
