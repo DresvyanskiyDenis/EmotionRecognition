@@ -1,3 +1,4 @@
+import argparse
 import sys
 sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
@@ -424,30 +425,32 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     torch.cuda.empty_cache()
 
 
-def main():
+def main(gradual_unfreezing, discriminative_learning):
     print("Start of the script....")
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
         return_class_weights=True)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,
-                GRADUAL_UNFREEZING=True, DISCRIMINATIVE_LEARNING=False)
-    print("End of the training...")
-    print("----------------------------------")
-    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
-                GRADUAL_UNFREEZING=False, DISCRIMINATIVE_LEARNING=True)
-    print("End of the training...")
-    print("----------------------------------")
-    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
-                GRADUAL_UNFREEZING=True, DISCRIMINATIVE_LEARNING=True)
-    print("End of the training...")
-    print("----------------------------------")
-    train_model(train_generator=train_generator, dev_generator=dev_generator, class_weights=class_weights,
-                GRADUAL_UNFREEZING=False, DISCRIMINATIVE_LEARNING=False)
-    print("End of the training...")
-    print("----------------------------------")
+                GRADUAL_UNFREEZING=gradual_unfreezing, DISCRIMINATIVE_LEARNING=discriminative_learning)
 
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        prog='Emotion Recognition model training',
+        epilog='Two arguments are required: gradual_unfreezing and discriminative_learning. THey both have boolean type.')
+    parser.add_argument('--gradual_unfreezing', type=int, required=True)
+    parser.add_argument('--discriminative_learning', type=int, required=True)
+    args = parser.parse_args()
+    # turn passed args from int to bool
+    print("Passed args: ",args.gradual_unfreezing, args.discriminative_learning)
+    if args.gradual_unfreezing not in [0,1]:
+        raise ValueError("gradual_unfreezing should be either 0 or 1")
+    if args.discriminative_learning not in [0,1]:
+        raise ValueError("discriminative_learning should be either 0 or 1")
+    gradual_unfreezing = True if args.gradual_unfreezing == 1 else False
+    discriminative_learning = True if args.discriminative_learning == 1 else False
+    # run main script with passed args
+    main(gradual_unfreezing, discriminative_learning)
+
