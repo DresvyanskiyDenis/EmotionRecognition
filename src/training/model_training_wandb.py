@@ -444,6 +444,7 @@ def main(model_type, gradual_unfreezing, discriminative_learning):
     print("Start of the script....")
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
+        model_type=model_type,
         return_class_weights=True)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,
