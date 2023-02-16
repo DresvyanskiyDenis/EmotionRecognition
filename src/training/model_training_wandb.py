@@ -247,6 +247,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     metaparams = {
         # general params
         "architecture": MODEL_TYPE,
+        "MODEL_TYPE": MODEL_TYPE,
         "dataset": "RECOLA, SEWA, SEMAINE, AFEW-VA, AffectNet",
         "BEST_MODEL_SAVE_PATH": training_config.BEST_MODEL_SAVE_PATH,
         "NUM_WORKERS": training_config.NUM_WORKERS,
@@ -454,7 +455,10 @@ def main(model_type, gradual_unfreezing, discriminative_learning):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
+    main(model_type="EfficientNet-B1",
+         gradual_unfreezing=True,
+         discriminative_learning=False)
+    """parser = argparse.ArgumentParser(
         prog='Emotion Recognition model training',
         epilog='Two arguments are required: gradual_unfreezing and discriminative_learning. THey both have boolean type.')
     parser.add_argument('--gradual_unfreezing', type=int, required=True)
@@ -475,5 +479,5 @@ if __name__ == "__main__":
     # run main script with passed args
     main(model_type = model_type,
          gradual_unfreezing=gradual_unfreezing,
-         discriminative_learning=discriminative_learning )
+         discriminative_learning=discriminative_learning )"""
 
