@@ -470,6 +470,8 @@ if __name__ == "__main__":
     gradual_unfreezing = True if args.gradual_unfreezing == 1 else False
     discriminative_learning = True if args.discriminative_learning == 1 else False
     model_type = args.model_type
+    if model_type not in ['MobileNetV3_large', 'EfficientNet-B1']:
+        raise ValueError("model_type should be either MobileNetV3_large or EfficientNet-B1. Got %s" % model_type)
     # run main script with passed args
     main(model_type = model_type,
          gradual_unfreezing=gradual_unfreezing,
