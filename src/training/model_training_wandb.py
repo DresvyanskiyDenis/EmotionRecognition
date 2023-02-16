@@ -15,7 +15,7 @@ from torch.nn.functional import one_hot
 
 import training_config
 from pytorch_utils.lr_schedullers import WarmUpScheduler
-from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
+from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large, Modified_EfficientNet_B1
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer, gradually_decrease_lr
 from pytorch_utils.training_utils.losses import SoftFocalLoss, RMSELoss
 from src.training.data_preparation import load_data_and_construct_dataloaders
@@ -239,14 +239,14 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
 
 
 def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader,
-                class_weights: torch.Tensor, GRADUAL_UNFREEZING:Optional[bool]=False,
+                class_weights: torch.Tensor, MODEL_TYPE:str, GRADUAL_UNFREEZING:Optional[bool]=False,
                 DISCRIMINATIVE_LEARNING:Optional[bool]=False) -> None:
     print("Start of the model training. Gradual_unfreezing:%s, Discriminative_lr:%s" % (GRADUAL_UNFREEZING,
                                                                                        DISCRIMINATIVE_LEARNING))
     # metaparams
     metaparams = {
         # general params
-        "architecture": "MobileNetV3_large",
+        "architecture": MODEL_TYPE,
         "dataset": "RECOLA, SEWA, SEMAINE, AFEW-VA, AffectNet",
         "BEST_MODEL_SAVE_PATH": training_config.BEST_MODEL_SAVE_PATH,
         "NUM_WORKERS": training_config.NUM_WORKERS,
@@ -287,16 +287,31 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
-                                       num_regression_neurons=config.NUM_REGRESSION_NEURONS)
+    if config.MODEL_TYPE == "MobileNetV3_large":
+        model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
+                                           num_regression_neurons=config.NUM_REGRESSION_NEURONS)
+    elif config.MODEL_TYPE == "EfficientNet-B1":
+        model = Modified_EfficientNet_B1(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
+                                         num_regression_neurons=config.NUM_REGRESSION_NEURONS)
+    else:
+        raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
 
     # define all model layers (params), which will be used by optimizer
-    model_layers = [
-        *list(list(list(model.children())[0].children())[0].children()),
-        *list(list(model.children())[0].children())[1:],
-        *list(model.children())[1:]
-    ]
+    if config.MODEL_TYPE == "MobileNetV3_large":
+        model_layers = [
+            *list(list(list(model.children())[0].children())[0].children()),
+            *list(list(model.children())[0].children())[1:],
+            *list(model.children())[1:]
+        ]
+    elif config.MODEL_TYPE == "EfficientNet-B1":
+        model_layers = [
+            *list(list(list(model.children())[0].children())[0].children()),
+            *list(list(model.children())[0].children())[1:],
+            *list(model.children())[1:]
+        ]
+    else:
+        raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     # layers unfreezer
     if GRADUAL_UNFREEZING:
         layers_unfreezer = GradualLayersUnfreezer(model=model, layers=model_layers,
@@ -425,13 +440,14 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     torch.cuda.empty_cache()
 
 
-def main(gradual_unfreezing, discriminative_learning):
+def main(model_type, gradual_unfreezing, discriminative_learning):
     print("Start of the script....")
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
         return_class_weights=True)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,
+                MODEL_TYPE=model_type,
                 GRADUAL_UNFREEZING=gradual_unfreezing, DISCRIMINATIVE_LEARNING=discriminative_learning)
 
 
@@ -442,6 +458,7 @@ if __name__ == "__main__":
         epilog='Two arguments are required: gradual_unfreezing and discriminative_learning. THey both have boolean type.')
     parser.add_argument('--gradual_unfreezing', type=int, required=True)
     parser.add_argument('--discriminative_learning', type=int, required=True)
+    parser.add_argument('--model_type', type=str, required=True)
     args = parser.parse_args()
     # turn passed args from int to bool
     print("Passed args: ",args.gradual_unfreezing, args.discriminative_learning)
@@ -451,6 +468,9 @@ if __name__ == "__main__":
         raise ValueError("discriminative_learning should be either 0 or 1")
     gradual_unfreezing = True if args.gradual_unfreezing == 1 else False
     discriminative_learning = True if args.discriminative_learning == 1 else False
+    model_type = args.model_type
     # run main script with passed args
-    main(gradual_unfreezing, discriminative_learning)
+    main(model_type = model_type,
+         gradual_unfreezing=gradual_unfreezing,
+         discriminative_learning=discriminative_learning )
 
