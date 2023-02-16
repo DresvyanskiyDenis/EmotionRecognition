@@ -21,6 +21,9 @@ from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_fa
     random_horizontal_flip_image, random_vertical_flip_image
 
 import training_config
+from pytorch_utils.models.input_preprocessing import resize_image_saving_aspect_ratio, EfficientNet_image_preprocessor, \
+    resize_image_to_224_saving_aspect_ratio, preprocess_image_MobileNetV3
+
 DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 
@@ -144,48 +147,6 @@ def preprocess_image_DeiT(image:np.ndarray)->torch.Tensor:
     image = DeiT_preprocessing_function(images=image, return_tensors="pt")['pixel_values']
     return image
 
-def preprocess_image_MobileNetV3(image:torch.Tensor)->torch.Tensor:
-    """
-    Preprocesses an image or batch of images for MobileNetV3 model.
-    Args:
-        image: torch.Tensor
-            Either a single image or a batch of images. The image should be in RGB format.
-
-    Returns: torch.Tensor
-        The preprocessed image or batch of images.
-
-    """
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    if not isinstance(image, torch.Tensor):
-        image = F.pil_to_tensor(image)
-    image = F.convert_image_dtype(image, torch.float)
-    image = F.normalize(image, mean=mean, std=std)
-    return image
-
-def resize_image_to_224_saving_aspect_ratio(image:torch.Tensor)-> torch.Tensor:
-    # TODO: redo it using only torch
-    expected_size = 224
-    # transform to PIL image
-    im = image.permute(1,2,0).cpu().detach().numpy()
-    im = Image.fromarray(im)
-
-    old_size = im.size  # old_size[0] is in (width, height) format
-    ratio = float(expected_size) / max(old_size)
-    new_size = tuple([int(x * ratio) for x in old_size])
-
-    # create a new image and paste the resized on it
-    im = im.resize(new_size, Resampling.BILINEAR)
-
-
-    new_im = Image.new("RGB", (expected_size, expected_size))
-    new_im.paste(im, ((expected_size - new_size[0]) // 2,
-                      (expected_size - new_size[1]) // 2))
-    # transform back to torch.Tensor
-    new_im = F.pil_to_tensor(new_im)
-    return new_im
-
-
 def get_augmentation_function(probability:float)->Dict[Callable, float]:
     """
     Returns a dictionary of augmentation functions and the probabilities of their application.
@@ -257,12 +218,14 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
     return (train_dataloader, dev_dataloader, test_dataloader)
 
 
-def load_data_and_construct_dataloaders(return_class_weights:Optional[bool]=False)->\
+def load_data_and_construct_dataloaders(model_type:str, return_class_weights:Optional[bool]=False)->\
         Union[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader],
               Tuple[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader], torch.Tensor]]:
     """
         Args:
-        return_class_weights: Optional[bool]
+            model_type: str
+            The type of the model. It can be 'MobileNetV3_large' or 'EfficientNet-B1'.
+            return_class_weights: Optional[bool]
             If True, the function returns the class weights as well.
 
     Loads the data presented in pd.DataFrames and constructs the data loaders using them. It is a general function
@@ -274,11 +237,19 @@ def load_data_and_construct_dataloaders(return_class_weights:Optional[bool]=Fals
         The train, dev and test data loaders and the class weights calculated based on the training labels.
 
     """
+    if model_type not in ['MobileNetV3_large', 'EfficientNet-B1']:
+        raise ValueError('The model type should be either "MobileNetV3_large" or "EfficientNet-B1".')
     # load pd.DataFrames
     train, dev, test = load_all_dataframes(training_config.splitting_seed)
     # define preprocessing functions
-    preprocessing_functions = [resize_image_to_224_saving_aspect_ratio,
-                               preprocess_image_MobileNetV3]
+    if model_type == 'MobileNetV3_large':
+        preprocessing_functions = [resize_image_to_224_saving_aspect_ratio,
+                                   preprocess_image_MobileNetV3]
+    elif model_type == 'EfficientNet-B1':
+        preprocessing_functions = [partial(resize_image_saving_aspect_ratio, expected_size = 240),
+                                   EfficientNet_image_preprocessor()]
+    else:
+        raise ValueError(f'The model type should be either "MobileNetV3_large" or "EfficientNet-B1". Got {model_type} instead.')
     # define augmentation functions
     augmentation_functions = get_augmentation_function(training_config.AUGMENT_PROB)
     # construct data loaders
