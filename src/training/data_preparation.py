@@ -84,6 +84,12 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     path_to_SEMAINE = r"/work/home/dsu/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
     path_to_SEWA = r"/work/home/dsu/Datasets/SEWA/preprocessed".replace("\\", os.sep)
 
+    path_to_RAD_DB = r"/media/external_hdd_2/Datasets/RAF_DB/preprocessed"
+    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/EMOTIC/preprocessed"
+    path_to_ExpW = r"/work/home/dsu/Datasets/ExpW/ExpW/preprocessed"
+    path_to_FER_plus = r"/work/home/dsu/Datasets/FER+/FER+/preprocessed"
+    path_to_SAVEE = r"/work/home/dsu/Datasets/SAVEE/SAVEE/preprocessed"
+
     # load dataframes and add np.NaN labels to columns that are not present in the dataset
     AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA,"labels.csv"))
     RECOLA = pd.read_csv(os.path.join(path_to_RECOLA,"preprocessed_labels.csv"))
