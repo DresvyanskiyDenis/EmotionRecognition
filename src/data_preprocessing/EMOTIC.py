@@ -77,7 +77,7 @@ def form_new_dataframe_using_original_one(original_df:pd.DataFrame, general_dir_
     for idx in range(original_df.shape[0]):
         filename = original_df.iloc[idx, 0]
         abs_path_to_file = os.path.join(general_dir_with_data, *filename.split("/"))
-        row_for_result_df = [abs_path_to_file, original_df.iloc[idx, -1], original_df.iloc[idx, -2], original_df.iloc[idx, -3]]
+        row_for_result_df = [abs_path_to_file, original_df['arousal'].iloc[idx], original_df['valence'].iloc[idx], original_df['category'].iloc[idx]]
         result_df_with_labels.loc[len(result_df_with_labels.index)] = row_for_result_df
     return result_df_with_labels
 
