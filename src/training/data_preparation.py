@@ -27,6 +27,20 @@ from pytorch_utils.models.input_preprocessing import resize_image_saving_aspect_
 DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 
+def split_static_dataset_into_train_dev_test(dataset:pd.DataFrame, percentages:Tuple[int, int, int], seed:int=42)->List[pd.DataFrame]:
+    # shuffle dataset
+    dataset = dataset.sample(frac=1, random_state=seed).reset_index(drop=True).copy(deep=True)
+    # divide dataset into train, development, and test sets
+    if sum(percentages) != 1.0:
+        raise ValueError("Percentages must sum up to 1.")
+    idx_train = int(round(len(dataset) * percentages[0])) # percentages are presented as fractional numbers
+    idx_dev = int(round(len(dataset) * percentages[1]))
+    idx_test = int(round(len(dataset) * percentages[2]))
+    train = dataset.iloc[:idx_train]
+    dev = dataset.iloc[idx_train:idx_train+idx_dev]
+    test = dataset.iloc[idx_train+idx_dev:]
+    return [train, dev, test]
+
 
 def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages:Tuple[int,int,int],
                                       seed:int=42)->List[pd.DataFrame]:
@@ -38,8 +52,10 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     elif "SEWA" in filenames_labels['path'].iloc[0] or "RECOLA" in filenames_labels['path'].iloc[0]\
         or "SEMAINE" in filenames_labels['path'].iloc[0]:
         filenames = filenames_labels['path'].apply(lambda x: x.split(os.path.sep)[-1].split("_")[0]+"_") # pattern: videoName_
+    elif "SAVEE" in filenames_labels['path'].iloc[0]:
+        filenames = filenames_labels['path'].apply(lambda x: x.split(os.path.sep)[-3]) # pattern: ParticipantID (DC, JE, JK, or KL)
     else:
-        raise ValueError("This function only supports AFEW-VA, SEWA, RECOLA, and SEMAINE datasets.")
+        raise ValueError("This function only supports AFEW-VA, SEWA, RECOLA, SAVEE, and SEMAINE datasets.")
     filenames = pd.unique(filenames)
     # divide dataset into unique filenames as a dictionary
     filenames_dict = {}
@@ -83,12 +99,6 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     path_to_RECOLA = r"/work/home/dsu/Datasets/RECOLA/preprocessed".replace("\\", os.sep)
     path_to_SEMAINE = r"/work/home/dsu/Datasets/SEMAINE/preprocessed".replace("\\", os.sep)
     path_to_SEWA = r"/work/home/dsu/Datasets/SEWA/preprocessed".replace("\\", os.sep)
-
-    path_to_RAD_DB = r"/media/external_hdd_2/Datasets/RAF_DB/preprocessed"
-    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/EMOTIC/preprocessed"
-    path_to_ExpW = r"/work/home/dsu/Datasets/ExpW/ExpW/preprocessed"
-    path_to_FER_plus = r"/work/home/dsu/Datasets/FER+/FER+/preprocessed"
-    path_to_SAVEE = r"/work/home/dsu/Datasets/SAVEE/SAVEE/preprocessed"
 
     # load dataframes and add np.NaN labels to columns that are not present in the dataset
     AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA,"labels.csv"))
@@ -136,15 +146,73 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     AffectNet_dev = AffectNet_dev[AffectNet_dev['path'].apply(lambda x: x.split('.')[-1] in allowed_extensions)]
 
 
+    # load additional datasets (they were added after all of aforementioned)
+    path_to_RAD_DB = r"/work/home/dsu/Datasets/RAF_DB/preprocessed"
+    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/EMOTIC/preprocessed"
+    path_to_ExpW = r"/work/home/dsu/Datasets/ExpW/ExpW/preprocessed"
+    path_to_FER_plus = r"/work/home/dsu/Datasets/FER_plus/images"
+    path_to_SAVEE = r"/work/home/dsu/Datasets/SAVEE/preprocessed"
+
+    RAF_DB = pd.read_csv(os.path.join(path_to_RAD_DB,"labels.csv")) # columns = abs_path,arousal,valence,category
+    EMOTIC_train = pd.read_csv(os.path.join(path_to_EMOTIC,"train_labels.csv")) # columns = abs_path,arousal,valence,category
+    EMOTIC_dev = pd.read_csv(os.path.join(path_to_EMOTIC,"dev_labels.csv")) # columns = abs_path,arousal,valence,category
+    EMOTIC_test = pd.read_csv(os.path.join(path_to_EMOTIC,"test_labels.csv")) # columns = abs_path,arousal,valence,category
+    ExpW = pd.read_csv(os.path.join(path_to_ExpW,"labels.csv")) # # columns = abs_path,arousal,valence,category
+    FER_plus = pd.read_csv(os.path.join(path_to_FER_plus,"labels.csv")) # columns: abs_path,arousal,valence,category
+    SAVEE = pd.read_csv(os.path.join(path_to_SAVEE,"labels.csv")) # columns = abs_path,timestamp,arousal,valence,category
+
+    # split to train, dev, test
+    percentages = (80, 10, 10)
+    RAF_DB_train, RAF_DB_dev, RAF_DB_test = split_static_dataset_into_train_dev_test(RAF_DB, percentages, seed=seed)
+    # EMOTIC is already split
+    ExpW_train, ExpW_dev, ExpW_test = split_static_dataset_into_train_dev_test(ExpW, percentages, seed=seed)
+    FER_plus_train = FER_plus # we do it completely for training
+    SAVEE_train, SAVEE_dev, SAVEE_test = split_dataset_into_train_dev_test(SAVEE, percentages=(50, 25, 25), seed=seed) # (50,25,25) because it has only 4 subjects
+    # NaN values to categories/valence/arousal are already added
+    # change columns name for RAF_DB, EMOTIC, ExpW, FER_plus, SAVEE from abs_path to path
+    RAF_DB_train, RAF_DB_dev, RAF_DB_test = RAF_DB_train.rename(columns={"abs_path": "path"}), \
+                                            RAF_DB_dev.rename(columns={"abs_path": "path"}), \
+                                            RAF_DB_test.rename(columns={"abs_path": "path"})
+    EMOTIC_train, EMOTIC_dev, EMOTIC_test = EMOTIC_train.rename(columns={"abs_path": "path"}), \
+                                            EMOTIC_dev.rename(columns={"abs_path": "path"}), \
+                                            EMOTIC_test.rename(columns={"abs_path": "path"})
+    ExpW_train, ExpW_dev, ExpW_test = ExpW_train.rename(columns={"abs_path": "path"}), \
+                                      ExpW_dev.rename(columns={"abs_path": "path"}), \
+                                      ExpW_test.rename(columns={"abs_path": "path"})
+    FER_plus_train = FER_plus_train.rename(columns={"abs_path": "path"})
+    SAVEE_train, SAVEE_dev, SAVEE_test = SAVEE_train.rename(columns={"abs_path": "path"}), \
+                                        SAVEE_dev.rename(columns={"abs_path": "path"}), \
+                                        SAVEE_test.rename(columns={"abs_path": "path"})
+    # transform emotion categories to int
+    RAF_DB_train, RAF_DB_dev, RAF_DB_test = transform_emo_categories_to_int(RAF_DB_train, training_config.EMO_CATEGORIES), \
+                                            transform_emo_categories_to_int(RAF_DB_dev, training_config.EMO_CATEGORIES), \
+                                            transform_emo_categories_to_int(RAF_DB_test, training_config.EMO_CATEGORIES)
+    EMOTIC_train, EMOTIC_dev, EMOTIC_test = transform_emo_categories_to_int(EMOTIC_train, training_config.EMO_CATEGORIES), \
+                                            transform_emo_categories_to_int(EMOTIC_dev, training_config.EMO_CATEGORIES), \
+                                            transform_emo_categories_to_int(EMOTIC_test, training_config.EMO_CATEGORIES)
+    ExpW_train, ExpW_dev, ExpW_test = transform_emo_categories_to_int(ExpW_train, training_config.EMO_CATEGORIES), \
+                                        transform_emo_categories_to_int(ExpW_dev, training_config.EMO_CATEGORIES), \
+                                        transform_emo_categories_to_int(ExpW_test, training_config.EMO_CATEGORIES)
+    FER_plus_train = transform_emo_categories_to_int(FER_plus_train, training_config.EMO_CATEGORIES)
+    SAVEE_train, SAVEE_dev, SAVEE_test = transform_emo_categories_to_int(SAVEE_train, training_config.EMO_CATEGORIES), \
+                                         transform_emo_categories_to_int(SAVEE_dev, training_config.EMO_CATEGORIES), \
+                                         transform_emo_categories_to_int(SAVEE_test, training_config.EMO_CATEGORIES)
+
+
+
 
     # concatenate all dataframes
-    train = pd.concat([AFEW_VA_train, RECOLA_train, SEMAINE_train, SEWA_train, AffectNet_train])
-    dev = pd.concat([AFEW_VA_dev, RECOLA_dev, SEMAINE_dev, SEWA_dev, AffectNet_dev])
-    test = pd.concat([AFEW_VA_test, RECOLA_test, SEMAINE_test, SEWA_test])
+    train = pd.concat([AFEW_VA_train, RECOLA_train, SEMAINE_train, SEWA_train, AffectNet_train, SAVEE_train, FER_plus_train, ExpW_train, EMOTIC_train, RAF_DB_train])
+    dev = pd.concat([AFEW_VA_dev, RECOLA_dev, SEMAINE_dev, SEWA_dev, AffectNet_dev, SAVEE_dev, ExpW_dev, EMOTIC_dev, RAF_DB_dev])
+    test = pd.concat([AFEW_VA_test, RECOLA_test, SEMAINE_test, SEWA_test, SAVEE_test, ExpW_test, EMOTIC_test, RAF_DB_test])
     # change external_hdd_1 to external_hdd_2 in paths for all datasets
     train['path'] = train['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
     dev['path'] = dev['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
     test['path'] = test['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    # again, change paths from "/media/external_hdd_2/Datasets" to  "/work/home/dsu/Datasets"
+    train['path'] = train['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    dev['path'] = dev['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    test['path'] = test['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
 
     return (train, dev, test)
 
@@ -191,11 +259,11 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
 
     Args:
         train: pd.DataFrame
-            The train set. It should contain the columns 'path' TODO: write columns.
+            The train set. It should contain the columns 'path'
         dev: pd.DataFrame
-            The dev set. It should contain the columns 'path' TODO: write columns.
+            The dev set. It should contain the columns 'path'
         test: pd.DataFrame
-            The test set. It should contain the columns 'path' TODO: write columns.
+            The test set. It should contain the columns 'path'
         preprocessing_functions: List[Callable]
             A list of preprocessing functions to be applied to the images.
         augmentation_functions: Optional[Dict[Callable, float]]
