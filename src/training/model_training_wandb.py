@@ -239,7 +239,7 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
 
 
 def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader,
-                class_weights: torch.Tensor, MODEL_TYPE:str, GRADUAL_UNFREEZING:Optional[bool]=False,
+                class_weights: torch.Tensor, MODEL_TYPE:str, BATCH_SIZE:int, ACCUMULATE_GRADIENTS:int, GRADUAL_UNFREEZING:Optional[bool]=False,
                 DISCRIMINATIVE_LEARNING:Optional[bool]=False) -> None:
     print("Start of the model training. Gradual_unfreezing:%s, Discriminative_lr:%s" % (GRADUAL_UNFREEZING,
                                                                                        DISCRIMINATIVE_LEARNING))
@@ -256,7 +256,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         "NUM_REGRESSION_NEURONS": training_config.NUM_REGRESSION_NEURONS,
         # training metaparams
         "NUM_EPOCHS": training_config.NUM_EPOCHS,
-        "BATCH_SIZE": training_config.BATCH_SIZE,
+        "BATCH_SIZE": BATCH_SIZE,
         "OPTIMIZER": training_config.OPTIMIZER,
         "AUGMENT_PROB": training_config.AUGMENT_PROB,
         "EARLY_STOPPING_PATIENCE": training_config.EARLY_STOPPING_PATIENCE,
@@ -281,6 +281,11 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         "DISCRIMINATIVE_LEARNING_STEP": training_config.DISCRIMINATIVE_LEARNING_STEP,
         "DISCRIMINATIVE_LEARNING_START_LAYER": training_config.DISCRIMINATIVE_LEARNING_START_LAYER,
     }
+    print("____________________________________________________")
+    print("Training params:")
+    for key, value in metaparams.items():
+        print(f"{key}: {value}")
+    print("____________________________________________________")
     # initialization of Weights and Biases
     wandb.init(project="Emotion_recognition_F2F", config=metaparams)
     config = wandb.config
@@ -288,6 +293,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # TODO: add other models
     if config.MODEL_TYPE == "MobileNetV3_large":
         model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
                                            num_regression_neurons=config.NUM_REGRESSION_NEURONS)
@@ -348,7 +354,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                          lr_scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                                                  T_max=config.ANNEALING_PERIOD,
                                                                                                  eta_min=config.LR_MIN_CYCLIC),
-                                         len_loader=len(train_generator)//training_config.ACCUMULATE_GRADIENTS,
+                                         len_loader=len(train_generator)//ACCUMULATE_GRADIENTS,
                                          warmup_steps=config.WARMUP_STEPS,
                                          warmup_start_lr=config.LR_MIN_WARMUP,
                                          warmup_mode=config.WARMUP_MODE)
@@ -377,7 +383,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         # train the model
         model.train()
         train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=100,
-                                 accumulate_gradients=training_config.ACCUMULATE_GRADIENTS,
+                                 accumulate_gradients=ACCUMULATE_GRADIENTS,
                                  warmup_lr_scheduller=lr_scheduller if config.LR_SCHEDULLER == 'Warmup_cyclic' else None)
         print("Train loss: %.10f" % train_loss)
 
@@ -441,7 +447,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     torch.cuda.empty_cache()
 
 
-def main(model_type, gradual_unfreezing, discriminative_learning):
+def main(model_type, batch_size, accumulate_gradients, gradual_unfreezing, discriminative_learning):
     print("Start of the script....")
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
@@ -449,7 +455,7 @@ def main(model_type, gradual_unfreezing, discriminative_learning):
         return_class_weights=True)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,
-                MODEL_TYPE=model_type,
+                MODEL_TYPE=model_type, BATCH_SIZE=batch_size, ACCUMULATE_GRADIENTS=accumulate_gradients,
                 GRADUAL_UNFREEZING=gradual_unfreezing, DISCRIMINATIVE_LEARNING=discriminative_learning)
 
 
@@ -457,24 +463,37 @@ def main(model_type, gradual_unfreezing, discriminative_learning):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog='Emotion Recognition model training',
-        epilog='Two arguments are required: gradual_unfreezing and discriminative_learning. THey both have boolean type.')
+        epilog='Parameters: model_type, batch_size, accumulate_gradients, gradual_unfreezing, discriminative_learning')
+    parser.add_argument('--model_type', type=str, required=True)
+    parser.add_argument('--batch_size', type=int, required=True)
+    parser.add_argument('--accumulate_gradients', type=int, required=True)
     parser.add_argument('--gradual_unfreezing', type=int, required=True)
     parser.add_argument('--discriminative_learning', type=int, required=True)
-    parser.add_argument('--model_type', type=str, required=True)
     args = parser.parse_args()
     # turn passed args from int to bool
-    print("Passed args: ",args.gradual_unfreezing, args.discriminative_learning)
+    print("Passed args: ", args)
+    # check arguments
+    if args.model_type not in ['MobileNetV3_large', 'EfficientNet-B1', 'EfficientNet-B6', 'ViT']:
+        raise ValueError("model_type should be either MobileNetV3_large, EfficientNet-B1, EfficientNet-B1, or ViT. Got %s" % args.model_type)
+    if args.batch_size < 1:
+        raise ValueError("batch_size should be greater than 0")
+    if args.accumulate_gradients < 1:
+        raise ValueError("accumulate_gradients should be greater than 0")
     if args.gradual_unfreezing not in [0,1]:
         raise ValueError("gradual_unfreezing should be either 0 or 1")
     if args.discriminative_learning not in [0,1]:
         raise ValueError("discriminative_learning should be either 0 or 1")
+    # convert args to bool
     gradual_unfreezing = True if args.gradual_unfreezing == 1 else False
     discriminative_learning = True if args.discriminative_learning == 1 else False
     model_type = args.model_type
-    if model_type not in ['MobileNetV3_large', 'EfficientNet-B1']:
-        raise ValueError("model_type should be either MobileNetV3_large or EfficientNet-B1. Got %s" % model_type)
+    batch_size = args.batch_size
+    accumulate_gradients = args.accumulate_gradients
     # run main script with passed args
-    main(model_type = model_type,
+    main(model_type = model_type, batch_size=batch_size, accumulate_gradients=accumulate_gradients,
          gradual_unfreezing=gradual_unfreezing,
          discriminative_learning=discriminative_learning )
+    # clear RAM
+    gc.collect()
+    torch.cuda.empty_cache()
 

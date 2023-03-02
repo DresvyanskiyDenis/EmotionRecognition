@@ -7,7 +7,6 @@ IMAGE_RESOLUTION:Tuple[int, int] = (240, 240)   # depends on the model
 
 # training metaparams
 NUM_EPOCHS:int = 100
-BATCH_SIZE:int = 128
 OPTIMIZER:str = "AdamW"
 AUGMENT_PROB:float = 0.05
 EARLY_STOPPING_PATIENCE:int = 30
@@ -37,7 +36,6 @@ DISCRIMINATIVE_LEARNING_START_LAYER:int = -7
 # general params
 BEST_MODEL_SAVE_PATH:str = "best_models/"
 NUM_WORKERS:int = 16
-ACCUMULATE_GRADIENTS:int = 4
 splitting_seed:int = 101095
 
 

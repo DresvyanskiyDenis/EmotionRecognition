@@ -31,11 +31,11 @@ def split_static_dataset_into_train_dev_test(dataset:pd.DataFrame, percentages:T
     # shuffle dataset
     dataset = dataset.sample(frac=1, random_state=seed).reset_index(drop=True).copy(deep=True)
     # divide dataset into train, development, and test sets
-    if sum(percentages) != 1.0:
-        raise ValueError("Percentages must sum up to 1.")
-    idx_train = int(round(len(dataset) * percentages[0])) # percentages are presented as fractional numbers
-    idx_dev = int(round(len(dataset) * percentages[1]))
-    idx_test = int(round(len(dataset) * percentages[2]))
+    if sum(percentages) != 100:
+        raise ValueError("Percentages must sum up to 100")
+    idx_train = int(round(len(dataset) * percentages[0]/100.))
+    idx_dev = int(round(len(dataset) * percentages[1]/100.))
+    idx_test = int(round(len(dataset) * percentages[2]/100.))
     train = dataset.iloc[:idx_train]
     dev = dataset.iloc[idx_train:idx_train+idx_dev]
     test = dataset.iloc[idx_train+idx_dev:]
@@ -148,18 +148,28 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
 
     # load additional datasets (they were added after all of aforementioned)
     path_to_RAD_DB = r"/work/home/dsu/Datasets/RAF_DB/preprocessed"
-    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/EMOTIC/preprocessed"
+    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/cvpr_emotic/cvpr_emotic/preprocessed/"
     path_to_ExpW = r"/work/home/dsu/Datasets/ExpW/ExpW/preprocessed"
     path_to_FER_plus = r"/work/home/dsu/Datasets/FER_plus/images"
     path_to_SAVEE = r"/work/home/dsu/Datasets/SAVEE/preprocessed"
 
     RAF_DB = pd.read_csv(os.path.join(path_to_RAD_DB,"labels.csv")) # columns = abs_path,arousal,valence,category
     EMOTIC_train = pd.read_csv(os.path.join(path_to_EMOTIC,"train_labels.csv")) # columns = abs_path,arousal,valence,category
-    EMOTIC_dev = pd.read_csv(os.path.join(path_to_EMOTIC,"dev_labels.csv")) # columns = abs_path,arousal,valence,category
+    EMOTIC_dev = pd.read_csv(os.path.join(path_to_EMOTIC,"val_labels.csv")) # columns = abs_path,arousal,valence,category
     EMOTIC_test = pd.read_csv(os.path.join(path_to_EMOTIC,"test_labels.csv")) # columns = abs_path,arousal,valence,category
     ExpW = pd.read_csv(os.path.join(path_to_ExpW,"labels.csv")) # # columns = abs_path,arousal,valence,category
     FER_plus = pd.read_csv(os.path.join(path_to_FER_plus,"labels.csv")) # columns: abs_path,arousal,valence,category
     SAVEE = pd.read_csv(os.path.join(path_to_SAVEE,"labels.csv")) # columns = abs_path,timestamp,arousal,valence,category
+
+    # change columns name for RAF_DB, EMOTIC, ExpW, FER_plus, SAVEE from abs_path to path
+    RAF_DB = RAF_DB.rename(columns={"abs_path": "path"})
+    EMOTIC_train = EMOTIC_train.rename(columns={"abs_path": "path"})
+    EMOTIC_dev = EMOTIC_dev.rename(columns={"abs_path": "path"})
+    EMOTIC_test = EMOTIC_test.rename(columns={"abs_path": "path"})
+    ExpW = ExpW.rename(columns={"abs_path": "path"})
+    FER_plus = FER_plus.rename(columns={"abs_path": "path"})
+    SAVEE = SAVEE.rename(columns={"abs_path": "path"})
+
 
     # split to train, dev, test
     percentages = (80, 10, 10)
@@ -169,20 +179,6 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     FER_plus_train = FER_plus # we do it completely for training
     SAVEE_train, SAVEE_dev, SAVEE_test = split_dataset_into_train_dev_test(SAVEE, percentages=(50, 25, 25), seed=seed) # (50,25,25) because it has only 4 subjects
     # NaN values to categories/valence/arousal are already added
-    # change columns name for RAF_DB, EMOTIC, ExpW, FER_plus, SAVEE from abs_path to path
-    RAF_DB_train, RAF_DB_dev, RAF_DB_test = RAF_DB_train.rename(columns={"abs_path": "path"}), \
-                                            RAF_DB_dev.rename(columns={"abs_path": "path"}), \
-                                            RAF_DB_test.rename(columns={"abs_path": "path"})
-    EMOTIC_train, EMOTIC_dev, EMOTIC_test = EMOTIC_train.rename(columns={"abs_path": "path"}), \
-                                            EMOTIC_dev.rename(columns={"abs_path": "path"}), \
-                                            EMOTIC_test.rename(columns={"abs_path": "path"})
-    ExpW_train, ExpW_dev, ExpW_test = ExpW_train.rename(columns={"abs_path": "path"}), \
-                                      ExpW_dev.rename(columns={"abs_path": "path"}), \
-                                      ExpW_test.rename(columns={"abs_path": "path"})
-    FER_plus_train = FER_plus_train.rename(columns={"abs_path": "path"})
-    SAVEE_train, SAVEE_dev, SAVEE_test = SAVEE_train.rename(columns={"abs_path": "path"}), \
-                                        SAVEE_dev.rename(columns={"abs_path": "path"}), \
-                                        SAVEE_test.rename(columns={"abs_path": "path"})
     # transform emotion categories to int
     RAF_DB_train, RAF_DB_dev, RAF_DB_test = transform_emo_categories_to_int(RAF_DB_train, training_config.EMO_CATEGORIES), \
                                             transform_emo_categories_to_int(RAF_DB_dev, training_config.EMO_CATEGORIES), \
