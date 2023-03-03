@@ -327,7 +327,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
     # print model architecture
-    summary(model, (2, 3, 224, 224))
+    summary(model, (2, 3, 380, 380))
 
     # define all model layers (params), which will be used by optimizer
     if config.MODEL_TYPE == "MobileNetV3_large":
