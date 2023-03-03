@@ -302,7 +302,7 @@ def load_data_and_construct_dataloaders(model_type:str, batch_size:int, return_c
     """
         Args:
             model_type: str
-            The type of the model. It can be 'MobileNetV3_large' or 'EfficientNet-B1'.
+            The type of the model.
             batch_size: int
             The batch size.
             return_class_weights: Optional[bool]
@@ -317,8 +317,8 @@ def load_data_and_construct_dataloaders(model_type:str, batch_size:int, return_c
         The train, dev and test data loaders and the class weights calculated based on the training labels.
 
     """
-    if model_type not in ['MobileNetV3_large', 'EfficientNet-B1']:
-        raise ValueError('The model type should be either "MobileNetV3_large" or "EfficientNet-B1".')
+    if model_type not in ['MobileNetV3_large', 'EfficientNet-B1', 'EfficientNet-B4']:
+        raise ValueError('The model type should be either "MobileNetV3_large", "EfficientNet-B1", "EfficientNet-B4".')
     # load pd.DataFrames
     train, dev, test = load_all_dataframes(training_config.splitting_seed)
     # define preprocessing functions
@@ -328,8 +328,12 @@ def load_data_and_construct_dataloaders(model_type:str, batch_size:int, return_c
     elif model_type == 'EfficientNet-B1':
         preprocessing_functions = [partial(resize_image_saving_aspect_ratio, expected_size = 240),
                                    EfficientNet_image_preprocessor()]
+    elif model_type == 'EfficientNet-B4':
+        preprocessing_functions = [partial(resize_image_saving_aspect_ratio, expected_size = 380),
+                                   EfficientNet_image_preprocessor()]
     else:
-        raise ValueError(f'The model type should be either "MobileNetV3_large" or "EfficientNet-B1". Got {model_type} instead.')
+        raise ValueError(f'The model type should be either "MobileNetV3_large", "EfficientNet-B1", "EfficientNet-B4". '
+                         f'Got {model_type} instead.')
     # define augmentation functions
     augmentation_functions = get_augmentation_function(training_config.AUGMENT_PROB)
     # construct data loaders
