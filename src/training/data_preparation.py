@@ -30,6 +30,8 @@ DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-
 def split_static_dataset_into_train_dev_test(dataset:pd.DataFrame, percentages:Tuple[int, int, int], seed:int=42)->List[pd.DataFrame]:
     # shuffle dataset
     dataset = dataset.sample(frac=1, random_state=seed).reset_index(drop=True).copy(deep=True)
+    # drop rows with NaNs in path column
+    dataset = dataset.dropna(subset=['path'])
     # divide dataset into train, development, and test sets
     if sum(percentages) != 100:
         raise ValueError("Percentages must sum up to 100")
