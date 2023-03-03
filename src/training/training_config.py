@@ -5,7 +5,7 @@ NUM_CLASSES:int = 8
 NUM_REGRESSION_NEURONS:int = 2
 MODEL_INPUT_SIZE:Dict[str, int] = {
     "MobileNetV3":224,
-    "EfficientNet-B0":224,
+    "EfficientNet-B1":224,
     "EfficientNet-B4":380,
     "ViT_B_16":224,
 }
