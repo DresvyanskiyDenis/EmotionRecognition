@@ -16,7 +16,7 @@ from torch.nn.functional import one_hot
 import training_config
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large, Modified_EfficientNet_B1, \
-    Modified_EfficientNet_B4
+    Modified_EfficientNet_B4, Modified_ViT_B_16
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer, gradually_decrease_lr
 from pytorch_utils.training_utils.losses import SoftFocalLoss, RMSELoss
 from src.training.data_preparation import load_data_and_construct_dataloaders
@@ -263,7 +263,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         # general params
         "architecture": MODEL_TYPE,
         "MODEL_TYPE": MODEL_TYPE,
-        "dataset": "RECOLA, SEWA, SEMAINE, AFEW-VA, AffectNet",
+        "dataset": "RECOLA, SEWA, SEMAINE, AFEW-VA, AffectNet, SAVEE, EMOTIC, ExpW, FER+, RAF_DB",
         "BEST_MODEL_SAVE_PATH": training_config.BEST_MODEL_SAVE_PATH,
         "NUM_WORKERS": training_config.NUM_WORKERS,
         # model architecture
@@ -308,7 +308,6 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # TODO: add other models
     if config.MODEL_TYPE == "MobileNetV3_large":
         model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
                                            num_regression_neurons=config.NUM_REGRESSION_NEURONS)
@@ -318,6 +317,9 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     elif config.MODEL_TYPE == "EfficientNet-B4":
         model = Modified_EfficientNet_B4(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
                                          num_regression_neurons=config.NUM_REGRESSION_NEURONS)
+    elif config.MODEL_TYPE == "ViT_B_16":
+        model = Modified_ViT_B_16(embeddings_layer_neurons=256, num_classes=config.NUM_CLASSES,
+                                  num_regression_neurons=config.NUM_REGRESSION_NEURONS)
     else:
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
@@ -327,13 +329,24 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         model_layers = [
             *list(list(list(model.children())[0].children())[0].children()),
             *list(list(model.children())[0].children())[1:],
-            *list(model.children())[1:]
+            *list(model.children())[1:]  # added layers
         ]
     elif config.MODEL_TYPE == "EfficientNet-B1" or config.MODEL_TYPE == "EfficientNet-B4":
         model_layers = [
             *list(list(model.children())[0].features.children()),
             *list(list(model.children())[0].children())[1:],
-            *list(model.children())[1:]
+            *list(model.children())[1:]  # added layers
+        ]
+    elif config.MODEL_TYPE == "ViT_B_16":
+        model_layers = [ list(model.model.children())[0], # first conv layer
+                         # encoder
+                         list(list(model.model.children())[1].children())[0], # Dropout of encoder
+                            # the encoder itself
+                            *list(list(list(model.model.children())[1].children())[1].children()), # blocks of encoder
+                            # end of the encoder itself
+                         list(list(model.model.children())[1].children())[2], # LayerNorm of encoder
+                         list(model.model.children())[2], # last linear layer
+            *list(model.children())[1:] # added layers
         ]
     else:
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
@@ -342,8 +355,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         layers_unfreezer = GradualLayersUnfreezer(model=model, layers=model_layers,
                                                   layers_per_epoch=config.UNFREEZING_LAYERS_PER_EPOCH,
                                                   layers_to_unfreeze_before_start=config.LAYERS_TO_UNFREEZE_BEFORE_START,
-                                                  input_shape=(config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
-                                                               training_config.IMAGE_RESOLUTION[1]),
+                                                  input_shape=(config.BATCH_SIZE, 3, training_config.MODEL_INPUT_SIZE[config.MODEL_TYPE],
+                                                               training_config.MODEL_INPUT_SIZE[config.MODEL_TYPE]),
                                                   verbose=True)
     # if discriminative learning is applied
     if DISCRIMINATIVE_LEARNING:
@@ -492,8 +505,8 @@ if __name__ == "__main__":
     # turn passed args from int to bool
     print("Passed args: ", args)
     # check arguments
-    if args.model_type not in ['MobileNetV3_large', 'EfficientNet-B1', 'EfficientNet-B4', 'ViT']:
-        raise ValueError("model_type should be either MobileNetV3_large, EfficientNet-B1, EfficientNet-B4, or ViT. Got %s" % args.model_type)
+    if args.model_type not in ['MobileNetV3_large', 'EfficientNet-B1', 'EfficientNet-B4', 'ViT_B_16']:
+        raise ValueError("model_type should be either MobileNetV3_large, EfficientNet-B1, EfficientNet-B4, or ViT_B_16. Got %s" % args.model_type)
     if args.batch_size < 1:
         raise ValueError("batch_size should be greater than 0")
     if args.accumulate_gradients < 1:

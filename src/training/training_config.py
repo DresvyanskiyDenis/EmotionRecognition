@@ -1,9 +1,14 @@
-from typing import Tuple
+from typing import Tuple, Dict
 
 # model architecture params
 NUM_CLASSES:int = 8
 NUM_REGRESSION_NEURONS:int = 2
-IMAGE_RESOLUTION:Tuple[int, int] = (240, 240)   # depends on the model
+MODEL_INPUT_SIZE:Dict[str, int] = {
+    "MobileNetV3":224,
+    "EfficientNet-B0":224,
+    "EfficientNet-B4":380,
+    "ViT_B_16":224,
+}
 
 # training metaparams
 NUM_EPOCHS:int = 100
