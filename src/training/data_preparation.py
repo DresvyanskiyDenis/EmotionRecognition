@@ -289,7 +289,7 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
     test_data_loader = ImageDataLoader(paths_with_labels=test, preprocessing_functions=preprocessing_functions,
                     augmentation_functions=None, shuffle=False)
 
-    train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers, shuffle=True)
+    train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers, drop_last = True, shuffle=True)
     dev_dataloader = DataLoader(dev_data_loader, batch_size=batch_size, num_workers=num_workers//2, shuffle=False)
     test_dataloader = DataLoader(test_data_loader, batch_size=batch_size, num_workers=num_workers//4, shuffle=False)
 
