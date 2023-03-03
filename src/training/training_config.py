@@ -10,7 +10,7 @@ NUM_EPOCHS:int = 100
 OPTIMIZER:str = "AdamW"
 AUGMENT_PROB:float = 0.05
 EARLY_STOPPING_PATIENCE:int = 30
-WEIGHT_DECAY:float = 0.00001
+WEIGHT_DECAY:float = 0.0001
 
 # scheduller
 LR_SCHEDULLER:str = "Warmup_cyclic"

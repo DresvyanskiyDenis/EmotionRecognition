@@ -115,6 +115,10 @@ def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoade
         print('Evaluation metrics for classifier:')
         for metric_name, metric_value in evaluation_metrics_classifier.items():
             print("%s: %.4f" % (metric_name, metric_value))
+    # clear RAM from unused variables
+    del inputs, labels, outputs, regression_output, classification_output, classification_ground_truth, \
+        regression_ground_truth, mask_arousal, mask_valence, mask_classifier
+    torch.cuda.empty_cache()
     return (evaluation_metrics_arousal, evaluation_metrics_valence, evaluation_metrics_classifier)
 
 
@@ -168,9 +172,14 @@ def train_step(model: torch.nn.Module, criterion: Tuple[torch.nn.Module, ...],
     # calculate loss based on mask
     ground_truth = ground_truth.to(device)
     loss = classification_criterion(output, ground_truth)
+
     classification_losses = [loss]
     # combine losses into one array
     losses = [*regression_losses, *classification_losses]
+    # clear RAM from unused variables
+    del regression_output, classification_output, regression_labels, classification_labels
+    del regression_mask, classification_mask, output, ground_truth
+
     return losses
 
 
@@ -235,6 +244,11 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
         if i % print_step == (print_step - 1):  # print every print_step mini-batches
             print("Mini-batch: %i, loss: %.10f" % (i, running_loss / print_step))
             running_loss = 0.0
+        # clear RAM from all the intermediate variables
+        del inputs, labels, step_losses, sum_losses
+    # clear RAM at the end of the epoch
+    torch.cuda.empty_cache()
+    gc.collect()
     return total_loss / counter
 
 
@@ -452,6 +466,7 @@ def main(model_type, batch_size, accumulate_gradients, gradual_unfreezing, discr
     # get data loaders
     (train_generator, dev_generator, test_generator), class_weights = load_data_and_construct_dataloaders(
         model_type=model_type,
+        batch_size=batch_size,
         return_class_weights=True)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,class_weights=class_weights,

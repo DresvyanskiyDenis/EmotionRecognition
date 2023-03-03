@@ -196,6 +196,9 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
                                          transform_emo_categories_to_int(SAVEE_dev, training_config.EMO_CATEGORIES), \
                                          transform_emo_categories_to_int(SAVEE_test, training_config.EMO_CATEGORIES)
 
+    # drop timestamp column from SAVEE
+    SAVEE_train = SAVEE_train.drop(columns=['timestamp'])
+
 
 
 
@@ -250,6 +253,7 @@ def get_augmentation_function(probability:float)->Dict[Callable, float]:
 
 def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFrame,
                            preprocessing_functions:List[Callable],
+                           batch_size:int,
                            augmentation_functions:Optional[Dict[Callable, float]]=None,
                            num_workers:int=8)\
         ->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
@@ -264,6 +268,8 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
             The test set. It should contain the columns 'path'
         preprocessing_functions: List[Callable]
             A list of preprocessing functions to be applied to the images.
+        batch_size: int
+            The batch size.
         augmentation_functions: Optional[Dict[Callable, float]]
             A dictionary of augmentation functions and the probabilities of their application.
         num_workers: int
@@ -283,20 +289,22 @@ def construct_data_loaders(train:pd.DataFrame, dev:pd.DataFrame, test:pd.DataFra
     test_data_loader = ImageDataLoader(paths_with_labels=test, preprocessing_functions=preprocessing_functions,
                     augmentation_functions=None, shuffle=False)
 
-    train_dataloader = DataLoader(train_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers, shuffle=True)
-    dev_dataloader = DataLoader(dev_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//2, shuffle=False)
-    test_dataloader = DataLoader(test_data_loader, batch_size=training_config.BATCH_SIZE, num_workers=num_workers//4, shuffle=False)
+    train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers, shuffle=True)
+    dev_dataloader = DataLoader(dev_data_loader, batch_size=batch_size, num_workers=num_workers//2, shuffle=False)
+    test_dataloader = DataLoader(test_data_loader, batch_size=batch_size, num_workers=num_workers//4, shuffle=False)
 
     return (train_dataloader, dev_dataloader, test_dataloader)
 
 
-def load_data_and_construct_dataloaders(model_type:str, return_class_weights:Optional[bool]=False)->\
+def load_data_and_construct_dataloaders(model_type:str, batch_size:int, return_class_weights:Optional[bool]=False)->\
         Union[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader],
               Tuple[Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader], torch.Tensor]]:
     """
         Args:
             model_type: str
             The type of the model. It can be 'MobileNetV3_large' or 'EfficientNet-B1'.
+            batch_size: int
+            The batch size.
             return_class_weights: Optional[bool]
             If True, the function returns the class weights as well.
 
@@ -327,6 +335,7 @@ def load_data_and_construct_dataloaders(model_type:str, return_class_weights:Opt
     # construct data loaders
     train_dataloader, dev_dataloader, test_dataloader = construct_data_loaders(train, dev, test,
                                                                                preprocessing_functions,
+                                                                               batch_size,
                                                                                augmentation_functions,
                                                                                num_workers=training_config.NUM_WORKERS)
 
