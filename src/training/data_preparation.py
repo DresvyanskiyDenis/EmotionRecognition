@@ -82,7 +82,7 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
     test = pd.concat([filenames_dict[filename] for filename in test_filenames])
     return [train, dev, test]
 
-def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->dict:
+def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->pd.DataFrame:
     df['category'] = df['category'].apply(lambda x: emo_categories[x])
     return df
 
