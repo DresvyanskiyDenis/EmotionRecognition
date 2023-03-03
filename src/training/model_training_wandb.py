@@ -1,5 +1,8 @@
 import argparse
 import sys
+
+from torchinfo import summary
+
 sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
 import gc
@@ -323,6 +326,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     else:
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
+    # print model architecture
+    summary(model, (2, 3, 224, 224))
 
     # define all model layers (params), which will be used by optimizer
     if config.MODEL_TYPE == "MobileNetV3_large":
@@ -363,6 +368,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         model_parameters = gradually_decrease_lr(layers=model_layers, initial_lr=config.DISCRIMINATIVE_LEARNING_INITIAL_LR,
                           multiplicator=config.DISCRIMINATIVE_LEARNING_MULTIPLICATOR, minimal_lr=config.DISCRIMINATIVE_LEARNING_MINIMAL_LR,
                           step=config.DISCRIMINATIVE_LEARNING_STEP, start_layer=config.DISCRIMINATIVE_LEARNING_START_LAYER)
+        for param_group in model_parameters:
+            print("size: {}, lr: {}".format(param_group['params'].shape, param_group['lr']))
         print('The learning rate was changed for each layer according to discriminative learning approach. The new learning rates are:')
     else:
         model_parameters = model.parameters()
