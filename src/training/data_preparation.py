@@ -45,7 +45,7 @@ def split_static_dataset_into_train_dev_test(dataset:pd.DataFrame, percentages:T
 def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages:Tuple[int,int,int],
                                       seed:int=42)->List[pd.DataFrame]:
     # get unique filenames (videos)
-    filenames_labels = filenames_labels.copy().dropna()
+    filenames_labels = filenames_labels.copy().dropna(subset=['path'])
     filenames_labels['path'] = filenames_labels['path'].astype(str)
     if "AFEW-VA" in filenames_labels['path'].iloc[0]:
         filenames =filenames_labels['path'].apply(lambda x: '/'+x.split(os.path.sep)[-2]+'/')
