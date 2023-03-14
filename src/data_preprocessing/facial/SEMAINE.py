@@ -6,7 +6,7 @@ import os
 
 import pandas as pd
 
-from src.data_preprocessing.RECOLA import load_labels, extract_faces_with_filenames_in_dataframe
+from src.data_preprocessing.facial.RECOLA import load_labels, extract_faces_with_filenames_in_dataframe
 
 
 def main():

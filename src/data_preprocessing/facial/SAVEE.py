@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from src.data_preprocessing.retinaface_utils import load_and_prepare_detector_retinaFace_mobileNet, \
+from src.data_preprocessing.facial.retinaface_utils import load_and_prepare_detector_retinaFace_mobileNet, \
     recognize_one_face_bbox, extract_face_according_bbox
 
 sys.path.extend(["/work/home/dsu/datatools/"])

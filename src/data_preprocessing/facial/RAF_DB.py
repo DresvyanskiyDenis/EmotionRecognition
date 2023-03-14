@@ -10,7 +10,7 @@ import os
 
 from PIL import Image
 
-from src.data_preprocessing.retinaface_utils import load_and_prepare_detector_retinaFace_mobileNet, \
+from src.data_preprocessing.facial.retinaface_utils import load_and_prepare_detector_retinaFace_mobileNet, \
     recognize_one_face_bbox, extract_face_according_bbox
 
 
