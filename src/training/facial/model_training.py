@@ -14,7 +14,7 @@ from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer
 from pytorch_utils.training_utils.losses import SoftFocalLoss
-from src.training.data_preparation import load_data_and_construct_dataloaders
+from src.training.facial.data_preparation import load_data_and_construct_dataloaders
 
 
 def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
@@ -281,8 +281,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
                                               layers_per_epoch=training_config.UNFREEZING_LAYERS_PER_EPOCH,
                                               layers_to_unfreeze_before_start=training_config.LAYERS_TO_UNFREEZE_BEFORE_START,
                                               input_shape=(
-                                              training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
-                                              training_config.IMAGE_RESOLUTION[1]),
+                                                  training_config.BATCH_SIZE, 3, training_config.IMAGE_RESOLUTION[0],
+                                                  training_config.IMAGE_RESOLUTION[1]),
                                               verbose=True)
     # early stopping
     best_val_metric_value = -np.inf  # we do maximization

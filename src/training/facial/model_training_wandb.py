@@ -22,7 +22,7 @@ from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large, Modified
     Modified_EfficientNet_B4, Modified_ViT_B_16
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer, gradually_decrease_lr
 from pytorch_utils.training_utils.losses import SoftFocalLoss, RMSELoss
-from src.training.data_preparation import load_data_and_construct_dataloaders
+from src.training.facial.data_preparation import load_data_and_construct_dataloaders
 import wandb
 
 

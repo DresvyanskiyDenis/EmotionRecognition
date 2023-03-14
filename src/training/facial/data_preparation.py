@@ -5,12 +5,7 @@ from typing import Tuple, List, Callable, Optional, Dict, Union
 import pandas as pd
 import numpy as np
 import torch
-import torchvision.transforms.functional as F
-import torchvision.transforms as T
-from PIL import Image, ImageOps
-from PIL.Image import Resampling
 from torch.utils.data import DataLoader
-from torchvision.io import read_image
 from transformers import DeiTImageProcessor
 
 from decorators.common_decorators import timer

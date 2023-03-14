@@ -1,6 +1,6 @@
 import gc
 from functools import partial
-from typing import Tuple, Callable, Dict
+from typing import Tuple, Dict
 
 import torch
 import numpy as np
@@ -8,9 +8,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
     mean_absolute_error
 
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
-from src.training import training_config
-from src.training.data_preparation import load_all_dataframes, resize_image_to_224_saving_aspect_ratio, \
-    preprocess_image_MobileNetV3, get_augmentation_function, construct_data_loaders
+from src.training.facial import training_config
+from src.training.facial.data_preparation import load_all_dataframes, resize_image_to_224_saving_aspect_ratio, \
+    preprocess_image_MobileNetV3, construct_data_loaders
 
 
 def validate_model_modified_MobileNetV3(model:torch.nn.Module, data_loader:torch.utils.data.DataLoader,
