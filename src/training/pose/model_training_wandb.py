@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-from pytorch_utils.models.CNN_models import Modified_HRNet
+from src.training.pose.HRNet import Modified_HRNet
 from src.training.pose.data_preparation import load_data_and_construct_dataloaders
 
 sys.path.extend(["/work/home/dsu/datatools/"])

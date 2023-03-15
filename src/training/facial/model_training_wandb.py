@@ -1,10 +1,13 @@
-import argparse
 import sys
-
-from torchinfo import summary
-
+sys.path.extend(["/work/home/dsu/simpleHigherHRNet/"])
+sys.path.extend(["/work/home/dsu/simpleHRNet/"])
 sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
+
+
+
+import argparse
+from torchinfo import summary
 import gc
 import os
 from functools import partial
