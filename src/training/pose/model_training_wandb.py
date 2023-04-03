@@ -1,13 +1,8 @@
 import argparse
 import sys
-
-from src.training.pose.HRNet import Modified_HRNet
-from src.training.pose.data_preparation import load_data_and_construct_dataloaders
-
 sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
-sys.path.extend(["/work/home/dsu/simpleHigherHRNet/"])
-sys.path.extend(["/work/home/dsu/simpleHRNet/"])
+sys.path.extend(["/work/home/dsu/simple-HRNet-master/"])
 
 from torchinfo import summary
 import gc
@@ -27,6 +22,10 @@ from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping, GradualLayersUnfreezer, gradually_decrease_lr
 from pytorch_utils.training_utils.losses import SoftFocalLoss, RMSELoss
 import wandb
+
+
+from src.training.pose.HRNet import Modified_HRNet
+from src.training.pose.data_preparation import load_data_and_construct_dataloaders
 
 
 def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
@@ -308,19 +307,21 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         print(f"{key}: {value}")
     print("____________________________________________________")
     # initialization of Weights and Biases
-    wandb.init(project="Emotion_recognition_F2F", config=metaparams)
+    wandb.init(project="Emotion_recognition_Pose_F2F", config=metaparams)
     config = wandb.config
     wandb.config.update({'BEST_MODEL_SAVE_PATH':wandb.run.dir}, allow_val_change=True)
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     if config.MODEL_TYPE == "Modified_HRNet":
-        model = Modified_HRNet(pretrained = True, path_to_weights="/work/home/dsu/simpleHRNet/pose_hrnet_w32_256x192.pth",
+        model = Modified_HRNet(pretrained = True, path_to_weights="/work/home/dsu/simple-HRNet-master/pose_hrnet_w32_256x192.pth",
                                embeddings_layer_neurons = 256, num_classes=config.NUM_CLASSES,
                                num_regression_neurons=config.NUM_REGRESSION_NEURONS)
     else:
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
+
+    summary(model, (128, 3, 256, 256), device=device)
 
     # define all model layers (params), which will be used by optimizer
     if config.MODEL_TYPE == "Modified_HRNet":
