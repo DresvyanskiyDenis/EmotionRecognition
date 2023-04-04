@@ -21,7 +21,8 @@ def _load_HRNet_model(device:str,
 class Modified_HRNet(nn.Module):
 
     def __init__(self, pretrained: bool = True, path_to_weights:Optional[str]=None, embeddings_layer_neurons: int = 256,
-                 num_classes: Optional[int] = None, num_regression_neurons: Optional[int] = None):
+                 num_classes: Optional[int] = None, num_regression_neurons: Optional[int] = None,
+                 consider_upper_body_only: bool = False):
         super(Modified_HRNet, self).__init__()
 
         self.pretrained = pretrained
@@ -29,6 +30,7 @@ class Modified_HRNet(nn.Module):
         self.embeddings_layer_neurons = embeddings_layer_neurons
         self.num_classes = num_classes
         self.num_regression_neurons = num_regression_neurons
+        self.consider_upper_body_only = consider_upper_body_only
         if pretrained:
             if self.path_to_weights is None:
                 raise ValueError('You must provide path to weights')
@@ -97,6 +99,9 @@ class Modified_HRNet(nn.Module):
 
     def forward(self, x):
         x = self.HRNet(x)
+        # if we consider only upper body, we need to cut off heatmaps resposible for lower body (those are the last 4)
+        if self.consider_upper_body_only:
+            x = x[:, :-4, :, :]
         x = self.additional_layers(x)
         x = self.dropout_after_conv(x)
         x = self.embeddings_layer(x)

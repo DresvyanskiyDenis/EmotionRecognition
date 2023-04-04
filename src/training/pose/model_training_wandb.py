@@ -316,7 +316,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     if config.MODEL_TYPE == "Modified_HRNet":
         model = Modified_HRNet(pretrained = True, path_to_weights="/work/home/dsu/simple-HRNet-master/pose_hrnet_w32_256x192.pth",
                                embeddings_layer_neurons = 256, num_classes=config.NUM_CLASSES,
-                               num_regression_neurons=config.NUM_REGRESSION_NEURONS)
+                               num_regression_neurons=config.NUM_REGRESSION_NEURONS,
+                               consider_upper_body_only=True)
     else:
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
