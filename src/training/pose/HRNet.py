@@ -65,7 +65,8 @@ class Modified_HRNet(nn.Module):
         self.additional_layers = torch.nn.Sequential(
             OrderedDict([
                 # block 1
-                ("conv1_new", torch.nn.Conv2d(17, 128, kernel_size=(3, 3), stride=(1, 1), padding="same")),
+                ("conv1_new", torch.nn.Conv2d(13, 128, kernel_size=(3, 3), stride=(1, 1), padding="same") if self.consider_upper_body_only
+                else torch.nn.Conv2d(17, 128, kernel_size=(3, 3), stride=(1, 1), padding="same")),
                 ("dropout1_new", torch.nn.Dropout(0.1)),
                 ("BatchNormalization1_new", torch.nn.BatchNorm2d(128)),
                 ("relu1_new", torch.nn.ReLU()),
