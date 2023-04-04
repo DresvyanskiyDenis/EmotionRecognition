@@ -39,7 +39,7 @@ class Modified_HRNet(nn.Module):
                              path_to_weights = self.path_to_weights)
         else:
             self.HRNet = SimpleHRNet(c=32, nof_joints=17, checkpoint_path=None, multiperson=False,
-                        return_heatmaps=False, return_bounding_boxes=False, device=device)
+                        return_heatmaps=False, return_bounding_boxes=False, device=device).model
 
         # "cut off" last layer
         self.HRNet.final_layer = torch.nn.Identity()
