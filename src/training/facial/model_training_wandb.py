@@ -179,6 +179,9 @@ def train_step(model: torch.nn.Module, criterion: Tuple[torch.nn.Module, ...],
     # calculate loss based on mask
     ground_truth = ground_truth.to(device)
     loss = classification_criterion(output, ground_truth)
+    loss = loss * training_config.multiplication_factor_of_focal_loss # this factor had been determined experimentally,
+    # by going through one epoch without updating the weights and calculating the average difference between the
+    # regression losses and the classification loss (focal loss)
 
     classification_losses = [loss]
     # combine losses into one array
@@ -339,7 +342,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         raise ValueError("Unknown model type: %s" % config.MODEL_TYPE)
     model = model.to(device)
     # print model architecture
-    summary(model, (2, 3, 380, 380))
+    #summary(model, (2, 3, 380, 380))
 
     # define all model layers (params), which will be used by optimizer
     if config.MODEL_TYPE == "MobileNetV3_large":

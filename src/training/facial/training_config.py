@@ -16,6 +16,7 @@ OPTIMIZER:str = "AdamW"
 AUGMENT_PROB:float = 0.05
 EARLY_STOPPING_PATIENCE:int = 35
 WEIGHT_DECAY:float = 0.0001
+multiplication_factor_of_focal_loss: float = 10.5
 
 # scheduller
 LR_SCHEDULLER:str = "Warmup_cyclic"
