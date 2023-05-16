@@ -23,7 +23,8 @@ import pandas as pd
 import torch
 import wandb
 
-from pytorch_utils.models.CNN_models import Modified_EfficientNet_B1, Modified_EfficientNet_B4, Modified_ViT_B_16
+from pytorch_utils.models.CNN_models import Modified_EfficientNet_B1, Modified_EfficientNet_B4, Modified_ViT_B_16, \
+    Modified_MobileNetV3_large
 
 
 def test_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
@@ -209,6 +210,9 @@ if __name__ == "__main__":
         elif model_type == "ViT_B_16":
             model = Modified_ViT_B_16(embeddings_layer_neurons=256, num_classes=training_config.NUM_CLASSES,
                                       num_regression_neurons=training_config.NUM_REGRESSION_NEURONS)
+        elif model_type == "MobileNetV3_large":
+            model = Modified_MobileNetV3_large(embeddings_layer_neurons=256, num_classes=training_config.NUM_CLASSES,
+                                               num_regression_neurons=training_config.NUM_REGRESSION_NEURONS)
         else:
             raise ValueError("Unknown model type: %s" % model_type)
         # load model weights
