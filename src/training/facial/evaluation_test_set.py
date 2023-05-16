@@ -1,8 +1,6 @@
 import gc
 import sys
 
-import numpy as np
-
 sys.path.extend(["/work/home/dsu/simpleHigherHRNet/"])
 sys.path.extend(["/work/home/dsu/simpleHRNet/"])
 sys.path.extend(["/work/home/dsu/datatools/"])
@@ -14,7 +12,9 @@ from typing import Dict, Tuple
 from src.training.facial import training_config
 from src.training.facial.data_preparation import load_data_and_construct_dataloaders
 from src.training.facial.model_training_wandb import evaluate_model
+import numpy as np
 
+from visualization.ConfusionMatrixVisualization import plot_and_save_confusion_matrix
 
 
 import os.path
@@ -37,6 +37,81 @@ def test_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, d
     # pack the metrics back into the tuple
     test_metrics = (test_metrics_arousal, test_metrics_valence, test_metrics_classification)
     return test_metrics
+
+
+def draw_confusion_matrix(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device,
+                          output_path:str, filename:str) -> None:
+
+    # create arrays for predictions and ground truth labels
+    predictions_classifier, predictions_arousal, predictions_valence = [], [], []
+    ground_truth_classifier, ground_truth_arousal, ground_truth_valence = [], [], []
+
+    # start evaluation
+    model.eval()
+    with torch.no_grad():
+        for i, data in enumerate(generator):
+            # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data
+            inputs = inputs.float()
+            inputs = inputs.to(device)
+
+            # forward pass
+            outputs = model(inputs)
+            regression_output = [outputs[1][:, 0], outputs[1][:, 1]]
+            classification_output = outputs[0]
+
+            # transform classification output to fit labels
+            classification_output = torch.softmax(classification_output, dim=-1)
+            classification_output = classification_output.cpu().numpy().squeeze()
+            classification_output = np.argmax(classification_output, axis=-1)
+            # transform regression output to fit labels
+            regression_output = [regression_output[0].cpu().numpy().squeeze(),
+                                 regression_output[1].cpu().numpy().squeeze()]
+
+            # transform ground truth labels to fit predictions and sklearn metrics
+            classification_ground_truth = labels[:, 2].cpu().numpy().squeeze()
+            regression_ground_truth = [labels[:, 0].cpu().numpy().squeeze(), labels[:, 1].cpu().numpy().squeeze()]
+
+            # save ground_truth labels and predictions in arrays to calculate metrics afterwards by one time
+            predictions_arousal.append(regression_output[0])
+            predictions_valence.append(regression_output[1])
+            predictions_classifier.append(classification_output)
+            ground_truth_arousal.append(regression_ground_truth[0])
+            ground_truth_valence.append(regression_ground_truth[1])
+            ground_truth_classifier.append(classification_ground_truth)
+
+        # concatenate all predictions and ground truth labels
+        predictions_arousal = np.concatenate(predictions_arousal, axis=0)
+        predictions_valence = np.concatenate(predictions_valence, axis=0)
+        predictions_classifier = np.concatenate(predictions_classifier, axis=0)
+        ground_truth_arousal = np.concatenate(ground_truth_arousal, axis=0)
+        ground_truth_valence = np.concatenate(ground_truth_valence, axis=0)
+        ground_truth_classifier = np.concatenate(ground_truth_classifier, axis=0)
+
+        # create mask for all NaN values to remove them from evaluation
+        mask_arousal = ~np.isnan(ground_truth_arousal)
+        mask_valence = ~np.isnan(ground_truth_valence)
+        mask_classifier = ~np.isnan(ground_truth_classifier)
+        # remove NaN values from arrays
+        predictions_arousal = predictions_arousal[mask_arousal]
+        predictions_valence = predictions_valence[mask_valence]
+        predictions_classifier = predictions_classifier[mask_classifier]
+        ground_truth_arousal = ground_truth_arousal[mask_arousal]
+        ground_truth_valence = ground_truth_valence[mask_valence]
+        ground_truth_classifier = ground_truth_classifier[mask_classifier]
+
+        # draw confusion matrix for classification
+        # draw confusion matrix
+        plot_and_save_confusion_matrix(y_true=ground_truth_classifier, y_pred=predictions_classifier,
+                                       name_labels=list(training_config.EMO_CATEGORIES.keys()),
+                                       path_to_save=output_path, name_filename=filename, title='Confusion matrix')
+
+    # clear RAM from unused variables
+    del inputs, labels, outputs, regression_output, classification_output, classification_ground_truth, \
+        regression_ground_truth, mask_arousal, mask_valence, mask_classifier
+    torch.cuda.empty_cache()
+
+
 
 
 def get_info_and_download_models_weights_from_project(entity: str, project_name: str, output_path: str) -> pd.DataFrame:
@@ -152,6 +227,12 @@ if __name__ == "__main__":
         test_metrics = test_model(model, test_generator, device)
         # unpack metrics
         test_metrics_arousal, test_metrics_valence, test_metrics_classification = test_metrics
+        # draw confusion matrix
+        if not os.path.exists(os.path.join(output_path_for_models_weights, 'confusion_matrices')):
+            os.makedirs(os.path.join(output_path_for_models_weights, 'confusion_matrices'))
+        draw_confusion_matrix(model=model, generator=test_generator, device=device,
+                              output_path=os.path.join(output_path_for_models_weights, 'confusion_matrices'),
+                              filename=info['ID'].iloc[i] + '.png')
 
 
         # save test metrics
@@ -168,6 +249,8 @@ if __name__ == "__main__":
 
         # save info
         info.to_csv(os.path.join(output_path_for_models_weights, 'info.csv'), index=False)
+
+
 
         # clear RAM and GPU memory
         del model, train_generator, dev_generator, test_generator, class_weights
