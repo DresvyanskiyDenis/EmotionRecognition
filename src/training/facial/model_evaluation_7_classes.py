@@ -281,9 +281,10 @@ def get_info_and_download_models_weights_from_project(entity: str, project_name:
     return info
 
 
-def test_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device, prefix:str) -> Tuple[
+def test_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device, prefix:str,
+               print_metrics:Optional[bool]=True) -> Tuple[
     Dict[str, float], ...]:
-    test_metrics = evaluate_model(model, generator, device)
+    test_metrics = evaluate_model(model, generator, device, print_metrics=print_metrics)
     # change the prefix of the metrics names from 'val_' to 'test_'
     test_metrics_arousal, test_metrics_valence, test_metrics_classification = test_metrics
     test_metrics_arousal = {key.replace('val_', prefix): value for key, value in test_metrics_arousal.items()}
