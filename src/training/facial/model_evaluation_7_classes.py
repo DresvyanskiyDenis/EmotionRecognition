@@ -8,7 +8,7 @@ sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
 
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 from src.training.facial import training_config
 from src.training.facial.data_preparation import load_data_and_construct_dataloaders
@@ -29,7 +29,7 @@ from pytorch_utils.models.CNN_models import Modified_EfficientNet_B1, Modified_E
     Modified_MobileNetV3_large
 
 
-def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device, print:Optional[bool]=True) -> Tuple[
+def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device, print_metrics:Optional[bool]=True) -> Tuple[
     Dict[object, float], ...]:
     evaluation_metrics_classification = {'val_accuracy_classification': accuracy_score,
                                          'val_precision_classification': partial(precision_score, average='macro'),
@@ -124,7 +124,7 @@ def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoade
             metric: evaluation_metrics_classification[metric](ground_truth_classifier, predictions_classifier) for
             metric in evaluation_metrics_classification}
         # print evaluation metrics
-        if print:
+        if print_metrics:
             print('Evaluation metrics for arousal:')
             for metric_name, metric_value in evaluation_metrics_arousal.items():
                 print("%s: %.4f" % (metric_name, metric_value))
