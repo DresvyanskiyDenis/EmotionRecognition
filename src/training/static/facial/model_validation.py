@@ -8,8 +8,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
     mean_absolute_error
 
 from pytorch_utils.models.CNN_models import Modified_MobileNetV3_large
-from src.training.facial import training_config
-from src.training.facial.data_preparation import load_all_dataframes, resize_image_to_224_saving_aspect_ratio, \
+from src.training.static.facial import training_config
+from src.training.static.facial.data_preparation import load_all_dataframes, resize_image_to_224_saving_aspect_ratio, \
     preprocess_image_MobileNetV3, construct_data_loaders
 
 

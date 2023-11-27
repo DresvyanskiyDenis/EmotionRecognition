@@ -24,8 +24,8 @@ from pytorch_utils.training_utils.losses import SoftFocalLoss, RMSELoss
 import wandb
 
 
-from src.training.pose.HRNet import Modified_HRNet
-from src.training.pose.data_preparation import load_data_and_construct_dataloaders
+from src.training.static.pose.HRNet import Modified_HRNet
+from src.training.static.pose.data_preparation import load_data_and_construct_dataloaders
 
 
 def evaluate_model(model: torch.nn.Module, generator: torch.utils.data.DataLoader, device: torch.device) -> Tuple[
