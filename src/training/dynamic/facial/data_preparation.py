@@ -266,3 +266,6 @@ if __name__=="__main__":
     train, dev, test = get_data_loaders(window_size=3, stride=1, base_model_type='EfficientNet-B1', batch_size=32)
     print(train.__len__(), dev.__len__(), test.__len__())
     print('-----------------------')
+    for x, y in train:
+        print(x.shape, y.shape)
+        break
