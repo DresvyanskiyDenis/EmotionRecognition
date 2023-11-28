@@ -1,14 +1,18 @@
 import os
 from functools import partial
-from typing import Tuple, List, Dict, Callable
+from typing import Tuple, List, Dict, Callable, Optional, Union
 
 import numpy as np
 import pandas as pd
+import torch
+from torch.utils.data import DataLoader
 
+from pytorch_utils.data_loaders.TemporalDataLoader import TemporalDataLoader
 from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_factor, grayscale_image, \
     collor_jitter_image_random, gaussian_blur_image_random, random_perspective_image, random_rotation_image, \
     random_crop_image, random_posterize_image, random_adjust_sharpness_image, random_equalize_image, \
     random_horizontal_flip_image, random_vertical_flip_image
+from pytorch_utils.models.input_preprocessing import resize_image_saving_aspect_ratio, EfficientNet_image_preprocessor
 
 
 def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -156,10 +160,109 @@ def separate_various_videos(data:pd.DataFrame)->Dict[str, pd.DataFrame]:
     results = {name:group for name, group in results}
     return results
 
+def construct_data_loaders(train:Dict[str, pd.DataFrame], dev:Dict[str, pd.DataFrame], test:Dict[str, pd.DataFrame],
+                           window_size:Union[int, float], stride:Union[int, float],
+                           preprocessing_functions:List[Callable],
+                           batch_size:int,
+                           augmentation_functions:Optional[Dict[Callable, float]]=None,
+                           num_workers:int=8)\
+        ->Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+    """
+    Constructs torch.utils.data.DataLoader for train, dev, and test sets. The TemporalDataLoader is used for
+        constructing the data loaders as it cuts the data on temporal windows internally.
+    Args:
+        train: pd.DataFrame
+            The dataframe with train data.
+        dev: pd.DataFrame
+            The dataframe with development data.
+        test: pd.DataFrame
+            The dataframe with test data.
+        preprocessing_functions: List[Callable]
+            A list of preprocessing functions to apply to the images.
+        batch_size: int
+            The batch size.
+        augmentation_functions: Optional[Dict[Callable, float]]
+            A dictionary of augmentation functions and the probabilities of their application to every image.
+            If None, no augmentation is applied.
+        num_workers: int
+            The number of workers to use for loading and preprocessinf the data.
+    Returns: Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+        A tuple of train, dev, and test data loaders.
+    """
+    labels_columns = ['arousal', 'valence']
+    train_data_loader = TemporalDataLoader(paths_with_labels=train, label_columns=labels_columns,
+                 window_size=window_size, stride=stride,
+                 consider_timestamps= True if type(window_size) == float else False,
+                 preprocessing_functions= preprocessing_functions,
+                 augmentation_functions = augmentation_functions, shuffle=True)
+
+    dev_data_loader = TemporalDataLoader(paths_with_labels=dev, label_columns=labels_columns,
+                 window_size=window_size, stride=stride,
+                 consider_timestamps= True if type(window_size) == float else False,
+                 preprocessing_functions= preprocessing_functions,
+                 augmentation_functions = augmentation_functions, shuffle=False)
+
+    test_data_loader = TemporalDataLoader(paths_with_labels=test, label_columns=labels_columns,
+                 window_size=window_size, stride=stride,
+                 consider_timestamps= True if type(window_size) == float else False,
+                 preprocessing_functions= preprocessing_functions,
+                 augmentation_functions = augmentation_functions, shuffle=False)
+
+    train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers, drop_last=True,
+                                  shuffle=True)
+    dev_dataloader = DataLoader(dev_data_loader, batch_size=batch_size, num_workers=num_workers // 2, shuffle=False)
+    test_dataloader = DataLoader(test_data_loader, batch_size=batch_size, num_workers=num_workers // 4, shuffle=False)
+
+    return (train_dataloader, dev_dataloader, test_dataloader)
+
+
+def get_data_loaders(window_size:Union[float, int], stride:Union[float, int],
+                     base_model_type:str, batch_size:int):
+    """
+    Loads data, constructs data loaders, and returns them.
+    Args:
+        base_model_type: str
+            The type of the base model to get the preprocessing functions for it. Can be 'EfficientNet-B1',
+            'EfficientNet-B4'
+        batch_size: int
+            The batch size.
+
+    Returns: Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+        A tuple of train, dev, and test data loaders.
+    """
+    # load data and separate it on videos
+    train, dev, test = load_all_dataframes()
+    train, dev, test = separate_various_videos(train), separate_various_videos(dev), separate_various_videos(test)
+    # get preprocessing functions
+    if base_model_type == 'EfficientNet-B1':
+        preprocessing_functions = [partial(resize_image_saving_aspect_ratio, expected_size = 240),
+                                   EfficientNet_image_preprocessor()]
+    elif base_model_type == 'EfficientNet-B4':
+        preprocessing_functions = [partial(resize_image_saving_aspect_ratio, expected_size = 380),
+                                   EfficientNet_image_preprocessor()]
+    else:
+        raise ValueError(f'The model type should be either "EfficientNet-B1", "EfficientNet-B4"'
+                         f'Got {base_model_type} instead.')
+    # get augmentation functions
+    augmentation_functions = get_augmentation_function(probability=0.03)
+    # construct data loaders
+    train_dataloader, dev_dataloader, test_dataloader = construct_data_loaders(train, dev, test,
+                                                                               window_size=window_size,
+                                                                               stride=stride,
+                                                                               preprocessing_functions=preprocessing_functions,
+                                                                               batch_size=batch_size,
+                                                                               augmentation_functions=augmentation_functions)
+
+    return (train_dataloader, dev_dataloader, test_dataloader)
+
+
+
+
+
+
 
 
 if __name__=="__main__":
-    train, dev, test = load_all_dataframes()
-    res = separate_various_videos(train)
-    a=1+2.
-    print(a)
+    train, dev, test = get_data_loaders(window_size=3, stride=1, base_model_type='EfficientNet-B1', batch_size=32)
+    print(train.__len__(), dev.__len__(), test.__len__())
+    print('-----------------------')
