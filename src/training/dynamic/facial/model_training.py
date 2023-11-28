@@ -1,10 +1,4 @@
 import sys
-
-from torchmetrics import ConcordanceCorrCoef
-
-from src.training.dynamic.facial.model_evaluation import evaluate_model
-from src.training.dynamic.facial.models import Transformer_model_b1, GRU_model_b1
-
 sys.path.extend(["/work/home/dsu/datatools/"])
 sys.path.extend(["/work/home/dsu/emotion_recognition_project/"])
 
@@ -20,11 +14,14 @@ from typing import Tuple, List, Dict, Optional
 import numpy as np
 import torch
 from sklearn.metrics import mean_squared_error, mean_absolute_error
+from torchmetrics import ConcordanceCorrCoef
 
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
 from src.training.dynamic.facial.data_preparation import get_data_loaders
 from pytorch_utils.training_utils.losses import CCCLoss
+from src.training.dynamic.facial.model_evaluation import evaluate_model
+from src.training.dynamic.facial.models import Transformer_model_b1, GRU_model_b1
 
 import wandb
 
