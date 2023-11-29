@@ -19,11 +19,12 @@ from torchmetrics import ConcordanceCorrCoef
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
 from src.training.dynamic.facial.data_preparation import get_data_loaders
-from pytorch_utils.training_utils.losses import CCCLoss
+from pytorch_utils.training_utils.losses import CCCLoss, RMSELoss
 from src.training.dynamic.facial.model_evaluation import evaluate_model
 from src.training.dynamic.facial.models import Transformer_model_b1, GRU_model_b1
 
 import wandb
+#torch.autograd.set_detect_anomaly(True)
 
 
 def train_step(model: torch.nn.Module, criterions: torch.nn.Module,
@@ -96,7 +97,6 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
     :return: float
             Average loss for the epoch.
     """
-
     running_loss = 0.0
     total_loss = 0.0
     counter = 0
@@ -155,10 +155,10 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         "EARLY_STOPPING_PATIENCE": 50,
         "WEIGHT_DECAY": 0.0001,
         # LR scheduller params
-        "LR_SCHEDULLER": "Cyclic",
+        "LR_SCHEDULLER": "Warmup_cyclic",
         "ANNEALING_PERIOD": 5,
-        "LR_MAX_CYCLIC": 0.0005,
-        "LR_MIN_CYCLIC": 0.0001,
+        "LR_MAX_CYCLIC": 0.005,
+        "LR_MIN_CYCLIC": 0.0005,
         "LR_MIN_WARMUP": 0.00001,
         "WARMUP_STEPS": 100,
         "WARMUP_MODE": "linear",
@@ -198,8 +198,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     # print model summary
     print(summary(model, input_size=(config.BATCH_SIZE, 12, 3, 224, 224), verbose=0))
     # Loss functions
-    criterions = [CCCLoss(reduction='mean', device=device),
-                  CCCLoss(reduction='mean', device=device),]
+    criterions = [CCCLoss(),
+                  CCCLoss()]
     # create LR scheduler
     lr_schedullers = {
         'Cyclic': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5,
@@ -208,11 +208,11 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         'Warmup_cyclic': WarmUpScheduler(optimizer=optimizer,
                                          lr_scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                                                  T_max=5,
-                                                                                                 eta_min=0.0001),
+                                                                                                 eta_min=config.LR_MIN_CYCLIC),
                                          len_loader=len(train_generator),
-                                         warmup_steps=100,
-                                         warmup_start_lr=0.00001,
-                                         warmup_mode="linear")
+                                         warmup_steps=config.WARMUP_STEPS,
+                                         warmup_start_lr=config.LR_MIN_WARMUP,
+                                         warmup_mode=config.WARMUP_MODE)
     }
     # if we use discriminative learning, we don't need LR scheduler
     lr_scheduller = lr_schedullers[config.LR_SCHEDULLER]
@@ -239,7 +239,10 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         print("Epoch: %i" % epoch)
         # train the model
         model.train()
-        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=1,
+        #print('weights linear layer')
+        #model.print_weights()
+        print('------------------------')
+        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=100,
                                  accumulate_gradients=ACCUMULATE_GRADIENTS,
                                  warmup_lr_scheduller=lr_scheduller if config.LR_SCHEDULLER == 'Warmup_cyclic' else None)
         print("Train loss: %.10f" % train_loss)
@@ -247,7 +250,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         # validate the model
         model.eval()
         print("Evaluation of the model on dev set.")
-        val_metrics = evaluate_model(model, dev_generator, evaluation_metrics)
+        val_metrics = evaluate_model(model, dev_generator, evaluation_metrics, device)
         val_CCC_arousal = val_metrics['CCC_val_arousal']
         val_CCC_valence = val_metrics['CCC_val_valence']
         val_CCC = (val_CCC_arousal + val_CCC_valence) / 2
@@ -265,8 +268,12 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         # log everything using wandb
         wandb.log({'epoch': epoch}, commit=False)
         wandb.log({'learning_rate': optimizer.param_groups[0]["lr"]}, commit=False)
-        wandb.log({'val_MSE': val_metrics['MSE_val']}, commit=False)
-        wandb.log({'val_MAE': val_metrics['MAE_val']}, commit=False)
+        wandb.log({'val_MSE_arousal': val_metrics['MSE_val_arousal']}, commit=False)
+        wandb.log({'val_MAE_arousal': val_metrics['MAE_val_arousal']}, commit=False)
+        wandb.log({'val_MSE_valence': val_metrics['MSE_val_valence']}, commit=False)
+        wandb.log({'val_MAE_valence': val_metrics['MAE_val_valence']}, commit=False)
+        wandb.log({'val_CCC_arousal': val_CCC_arousal}, commit=False)
+        wandb.log({'val_CCC_valence': val_CCC_valence}, commit=False)
         wandb.log({'val_CCC': val_CCC}, commit=False)
         wandb.log({'train_loss_CCC': train_loss})
         # update LR if needed

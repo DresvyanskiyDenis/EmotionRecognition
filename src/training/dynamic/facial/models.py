@@ -24,8 +24,8 @@ class Transformer_model_b1(torch.nn.Module):
         # create three transformer blocks
         self.transformer_block_1 = Transformer_layer(input_dim=256, num_heads=8,
                                                      positional_encoding=True)
-        #self.transformer_block_2 = Transformer_layer(input_dim=256, num_heads=8,
-        #                                                positional_encoding=True)
+        self.transformer_block_2 = Transformer_layer(input_dim=256, num_heads=8,
+                                                        positional_encoding=True)
         # create linear layer
         self.linear = torch.nn.Linear(256, 2)
         # create tanh activation layer
@@ -36,7 +36,7 @@ class Transformer_model_b1(torch.nn.Module):
         x = self.base_model(x)
         # transformer blocks
         x = self.transformer_block_1(x, x, x)
-        #x = self.transformer_block_2(x, x, x)
+        x = self.transformer_block_2(x, x, x)
         # linear layer
         x = self.linear(x)
         # tanh activation
@@ -58,20 +58,22 @@ class GRU_model_b1(torch.nn.Module):
         # wrap model in TimeDistributed layer
         self.base_model = TimeDistributed(self.base_model)
         # create GRU layer
-        self.gru = torch.nn.GRU(input_size=256, hidden_size=256, num_layers=1, batch_first=True)
+        self.gru = torch.nn.GRU(input_size=256, hidden_size=128, num_layers=2, batch_first=True)
         # create linear layer
-        self.linear = torch.nn.Linear(256, 2)
+        self.linear = torch.nn.Linear(128, 2)
         # create tanh activation layer
-        #self.tanh = torch.nn.Tanh()
+        self.tanh = torch.nn.Tanh()
 
     def forward(self, x):
         # base model
         x = self.base_model(x)
         # GRU
         x, _ = self.gru(x)
-        print(x[0, 0, :])
         # linear layer
         x = self.linear(x)
         # tanh activation
-        #x = self.tanh(x)
+        x = self.tanh(x)
         return x
+
+    def print_weights(self):
+        print(self.linear.weight)
