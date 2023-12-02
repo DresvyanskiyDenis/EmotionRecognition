@@ -157,8 +157,8 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         # LR scheduller params
         "LR_SCHEDULLER": "Warmup_cyclic",
         "ANNEALING_PERIOD": 5,
-        "LR_MAX_CYCLIC": 0.005,
-        "LR_MIN_CYCLIC": 0.0005,
+        "LR_MAX_CYCLIC": 0.01,
+        "LR_MIN_CYCLIC": 0.01,
         "LR_MIN_WARMUP": 0.00001,
         "WARMUP_STEPS": 100,
         "WARMUP_MODE": "linear",

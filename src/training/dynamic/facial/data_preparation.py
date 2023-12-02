@@ -13,7 +13,7 @@ from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_fa
     random_crop_image, random_posterize_image, random_adjust_sharpness_image, random_equalize_image, \
     random_horizontal_flip_image, random_vertical_flip_image
 from pytorch_utils.models.input_preprocessing import resize_image_saving_aspect_ratio, EfficientNet_image_preprocessor
-
+splitting_seed:int = 101095
 
 def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -47,17 +47,17 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     AFEW_VA['valence'] = AFEW_VA['valence'].apply(lambda x: x / 10.)
     AFEW_VA['arousal'] = AFEW_VA['arousal'].apply(lambda x: x / 10.)
 
-    # unfortunately, we do not know the FPS of the AFEW-VA dataset. Other three dataset have 3 FPS as we have
+    # unfortunately, we do not know the FPS of the AFEW-VA dataset. Other three dataset have 5 FPS as we have
     # downsampled them before. We assume that AFEW-VA has 25 FPS as it is the most common FPS in the wild.
-    # therefore, we need to downsample AFEW-VA to 3 FPS. This means that we take every 8th frame from the dataset (approx.)
-    AFEW_VA = AFEW_VA.iloc[::8, :]
+    # therefore, we need to downsample AFEW-VA to 5 FPS. This means that we take every 5th frame from the dataset (approx.)
+    AFEW_VA = AFEW_VA.iloc[::5, :]
 
     # splitting to train, development, and test sets
     percentages = (80, 10, 10)
-    AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages, seed=seed)
-    RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages, seed=seed)
-    SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages, seed=seed)
-    SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages, seed=seed)
+    AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages, seed=splitting_seed)
+    RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages, seed=splitting_seed)
+    SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages, seed=splitting_seed)
+    SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages, seed=splitting_seed)
 
     # concatenate all dataframes
     train = pd.concat([AFEW_VA_train, RECOLA_train, SEMAINE_train, SEWA_train])
