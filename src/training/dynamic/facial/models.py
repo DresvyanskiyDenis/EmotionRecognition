@@ -9,8 +9,9 @@ class Transformer_model_b1(torch.nn.Module):
     """
 
     """
-    def __init__(self, path_to_weights_base_model:str):
+    def __init__(self, path_to_weights_base_model:str, seq_len:int):
         super(Transformer_model_b1, self).__init__()
+        self.seq_len = seq_len
         self.base_model = Modified_EfficientNet_B1(embeddings_layer_neurons=256, num_classes=8,
                                               num_regression_neurons=2)
         self.base_model.load_state_dict(torch.load(path_to_weights_base_model))
@@ -26,8 +27,10 @@ class Transformer_model_b1(torch.nn.Module):
                                                      positional_encoding=True)
         self.transformer_block_2 = Transformer_layer(input_dim=256, num_heads=8,
                                                         positional_encoding=True)
+        # get rid of sequence dimension using conv1d
+        self.conv1d = torch.nn.Conv1d(in_channels=256, out_channels=128, kernel_size=self.seq_len)
         # create linear layer
-        self.linear = torch.nn.Linear(256, 2)
+        self.linear = torch.nn.Linear(128, 2)
         # create tanh activation layer
         self.tanh = torch.nn.Tanh()
 
@@ -36,7 +39,13 @@ class Transformer_model_b1(torch.nn.Module):
         x = self.base_model(x)
         # transformer blocks
         x = self.transformer_block_1(x, x, x)
-        x = self.transformer_block_2(x, x, x)
+        x = self.transformer_block_2(x, x, x) # output shape: (batch_size, seq_len, hidden_size)
+        # permute x to (batch_size, hidden_size, seq_len)
+        x = x.permute(0, 2, 1)
+        # conv1d
+        x = self.conv1d(x)
+        # squeeze sequence dimension
+        x = x.squeeze(dim=2)
         # linear layer
         x = self.linear(x)
         # tanh activation
@@ -45,8 +54,9 @@ class Transformer_model_b1(torch.nn.Module):
 
 
 class GRU_model_b1(torch.nn.Module):
-    def __init__(self, path_to_weights_base_model:str):
+    def __init__(self, path_to_weights_base_model:str, seq_len:int):
         super(GRU_model_b1, self).__init__()
+        self.seq_len = seq_len
         self.base_model = Modified_EfficientNet_B1(embeddings_layer_neurons=256, num_classes=8,
                                               num_regression_neurons=2)
         self.base_model.load_state_dict(torch.load(path_to_weights_base_model))
@@ -59,6 +69,8 @@ class GRU_model_b1(torch.nn.Module):
         self.base_model = TimeDistributed(self.base_model)
         # create GRU layer
         self.gru = torch.nn.GRU(input_size=256, hidden_size=128, num_layers=2, batch_first=True)
+        # get rid of sequence dimension using conv1d
+        self.conv1d = torch.nn.Conv1d(in_channels=128, out_channels=128, kernel_size=self.seq_len)
         # create linear layer
         self.linear = torch.nn.Linear(128, 2)
         # create tanh activation layer
@@ -68,7 +80,13 @@ class GRU_model_b1(torch.nn.Module):
         # base model
         x = self.base_model(x)
         # GRU
-        x, _ = self.gru(x)
+        x, _ = self.gru(x) # output: (batch_size, seq_len, hidden_size)
+        # change the shape of x to (batch_size, hidden_size, seq_len)
+        x = x.permute(0, 2, 1)
+        # conv1d
+        x = self.conv1d(x)
+        # squeeze sequence dimension
+        x = x.squeeze(dim=-1)
         # linear layer
         x = self.linear(x)
         # tanh activation
@@ -77,3 +95,40 @@ class GRU_model_b1(torch.nn.Module):
 
     def print_weights(self):
         print(self.linear.weight)
+
+
+class Simple_CNN(torch.nn.Module):
+    def __init__(self, path_to_weights_base_model:str, seq_len:int):
+        super(Simple_CNN, self).__init__()
+        self.seq_len = seq_len
+        self.base_model = Modified_EfficientNet_B1(embeddings_layer_neurons=256, num_classes=8,
+                                                num_regression_neurons=2)
+        self.base_model.load_state_dict(torch.load(path_to_weights_base_model))
+        # cut off last two layers of base model
+        self.base_model = torch.nn.Sequential(*list(self.base_model.children())[:-2])
+        # freeze base model
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+        # wrap model in TimeDistributed layer
+        self.base_model = TimeDistributed(self.base_model)
+        # create conv1d layer
+        self.conv1d = torch.nn.Conv1d(in_channels=256, out_channels=128, kernel_size=self.seq_len)
+        # create linear layer
+        self.linear = torch.nn.Linear(128, 2)
+        # create tanh activation layer
+        self.tanh = torch.nn.Tanh()
+
+    def forward(self, x):
+        # base model
+        x = self.base_model(x)
+        # permute x to (batch_size, hidden_size, seq_len)
+        x = x.permute(0, 2, 1)
+        # conv1d
+        x = self.conv1d(x)
+        # squeeze sequence dimension
+        x = x.squeeze(dim=-1)
+        # linear layer
+        x = self.linear(x)
+        # tanh activation
+        x = self.tanh(x)
+        return x
