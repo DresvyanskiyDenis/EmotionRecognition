@@ -8,23 +8,20 @@ import argparse
 from torchinfo import summary
 import gc
 import os
-from functools import partial
-from typing import Tuple, List, Dict, Optional
+from typing import Optional
 
 import numpy as np
 import torch
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from torchmetrics import ConcordanceCorrCoef
 
 from pytorch_utils.lr_schedullers import WarmUpScheduler
 from pytorch_utils.training_utils.callbacks import TorchEarlyStopping
 from src.training.dynamic.facial.data_preparation import get_data_loaders
-from pytorch_utils.training_utils.losses import CCCLoss, RMSELoss
+from pytorch_utils.training_utils.losses import RMSELoss
 from src.training.dynamic.facial.model_evaluation import evaluate_model
-from src.training.dynamic.facial.models import Transformer_model_b1, GRU_model_b1
+from src.training.dynamic.facial.models import Transformer_model_b1, GRU_model_b1, Simple_CNN
 
 import wandb
-#torch.autograd.set_detect_anomaly(True)
 
 
 def train_step(model: torch.nn.Module, criterions: torch.nn.Module,
@@ -44,17 +41,18 @@ def train_step(model: torch.nn.Module, criterions: torch.nn.Module,
             Device to use for training.
     :return:
     """
+    # ground_truth shape: (batch_size, 2) Seq2One
+    # output shape: (batch_size, 2)
     # forward pass
     output = model(input)
-    #print(output)
     # separate outputs on arousal valence
-    output_arousal = output[:, :, 0].squeeze()
-    output_valence = output[:, :, 1].squeeze()
+    output_arousal = output[:, 0].squeeze()
+    output_valence = output[:, 1].squeeze()
 
     # separate ground truth
     ground_truth = ground_truth.to(device)
-    ground_truth_arousal = ground_truth[:, :, 0].squeeze()
-    ground_truth_valence = ground_truth[:, :, 1].squeeze()
+    ground_truth_arousal = ground_truth[:, 0].squeeze()
+    ground_truth_valence = ground_truth[:, 1].squeeze()
 
     # calculate criterion
     loss_arousal = criterions[0](output_arousal, ground_truth_arousal)
@@ -72,7 +70,6 @@ def train_step(model: torch.nn.Module, criterions: torch.nn.Module,
 def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLoader,
                 optimizer: torch.optim.Optimizer, criterions: torch.nn.Module,
                 device: torch.device, print_step: int = 20,
-                accumulate_gradients: Optional[int] = 1,
                 warmup_lr_scheduller: Optional[object] = None) -> float:
     """ Performs one epoch of training for a model.
 
@@ -89,8 +86,6 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
             Device to use for training.
     :param print_step: int
             Number of mini-batches between two prints of the running loss.
-    :param accumulate_gradients: Optional[int]
-            Number of mini-batches to accumulate gradients for. If 1, no accumulation is performed.
     :param warmup_lr_scheduller: Optional[torch.optim.lr_scheduler]
             Learning rate scheduller in case we have warmup lr scheduller. In that case, the learning rate is being changed
             after every mini-batch, therefore should be passed to this function.
@@ -105,21 +100,20 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
         inputs, labels = data
         inputs = inputs.float()
         inputs = inputs.to(device)
+        # transform labels. We take the last value of each sequence as we need to predict only the last affective state
+        labels = labels[:, -1, :]
 
         # do train step
         with torch.set_grad_enabled(True):
             # form indecex of labels which should be one-hot encoded
             loss = train_step(model, criterions, inputs, labels, device)
-            # normalize losses by number of accumulate gradient steps
-            loss = loss / accumulate_gradients
             # backward pass
             loss.backward()
-            # update weights if we have accumulated enough gradients
-            if (i + 1) % accumulate_gradients == 0 or (i + 1 == len(train_generator)):
-                optimizer.step()
-                optimizer.zero_grad()
-                if warmup_lr_scheduller is not None:
-                    warmup_lr_scheduller.step()
+            # update weights
+            optimizer.step()
+            optimizer.zero_grad()
+            if warmup_lr_scheduller is not None:
+                warmup_lr_scheduller.step()
 
         # print statistics
         running_loss += loss.item()
@@ -136,29 +130,35 @@ def train_epoch(model: torch.nn.Module, train_generator: torch.utils.data.DataLo
     return total_loss / counter
 
 
-def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader, seq2seq_model_type:str,
-                base_model_type:str, BATCH_SIZE:int, ACCUMULATE_GRADIENTS:int) -> None:
+
+def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: torch.utils.data.DataLoader, seq2one_model_type:str,
+                base_model_type:str, BATCH_SIZE:int) -> None:
+    # get the sequence length
+    seq_len = next(iter(train_generator))[0].shape[1] # the input data shape: (batch_size, seq_len, channels, height, width)
+
+
     # metaparams
     metaparams = {
         # general params
-        "architecture": seq2seq_model_type,
+        "architecture": seq2one_model_type,
         "base_model_type": base_model_type,
+        "sequence_length": seq_len,
         "path_to_weights_base_model": "/work/home/dsu/tmp/radiant_fog_160.pth",
-        "dataset": "RECOLA, SEWA, SEMAINE",
+        "dataset": "RECOLA, SEWA, SEMAINE, AFEW-VA",
         "BEST_MODEL_SAVE_PATH": "best_models/",
         "NUM_WORKERS": 8,
         # training metaparams
         "NUM_EPOCHS": 100,
         "BATCH_SIZE": BATCH_SIZE,
         "OPTIMIZER": "AdamW",
-        "AUGMENT_PROB": 0.03,
+        "AUGMENT_PROB": 0.02,
         "EARLY_STOPPING_PATIENCE": 50,
         "WEIGHT_DECAY": 0.0001,
         # LR scheduller params
         "LR_SCHEDULLER": "Warmup_cyclic",
         "ANNEALING_PERIOD": 5,
-        "LR_MAX_CYCLIC": 0.01,
-        "LR_MIN_CYCLIC": 0.01,
+        "LR_MAX_CYCLIC": 0.005,
+        "LR_MIN_CYCLIC": 0.0001,
         "LR_MIN_WARMUP": 0.00001,
         "WARMUP_STEPS": 100,
         "WARMUP_MODE": "linear",
@@ -169,17 +169,20 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         print(f"{key}: {value}")
     print("____________________________________________________")
     # initialization of Weights and Biases
-    wandb.init(project="Emotion_Recognition_Seq2Seq", config=metaparams)
+    wandb.init(project="Emotion_Recognition_Seq2One", config=metaparams)
     config = wandb.config
     wandb.config.update({'BEST_MODEL_SAVE_PATH':wandb.run.dir}, allow_val_change=True)
 
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # get the sequence length
     if config.base_model_type == "EfficientNet-B1":
         if config.architecture == "transformer":
-            model = Transformer_model_b1(path_to_weights_base_model=config.path_to_weights_base_model)
+            model = Transformer_model_b1(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
         elif config.architecture == "gru":
-            model = GRU_model_b1(path_to_weights_base_model=config.path_to_weights_base_model)
+            model = GRU_model_b1(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
+        elif config.architecture == "simple_cnn":
+            model = Simple_CNN(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
         else:
             raise ValueError("Unknown model type: %s" % config.architecture)
     else:
@@ -196,10 +199,10 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     optimizer = optimizers[config.OPTIMIZER](model_parameters, lr=config.LR_MAX_CYCLIC,
                                              weight_decay=config.WEIGHT_DECAY)
     # print model summary
-    print(summary(model, input_size=(config.BATCH_SIZE, 12, 3, 224, 224), verbose=0))
+    print(summary(model, input_size=(config.BATCH_SIZE, seq_len, 3, 240, 240), verbose=0))
     # Loss functions
-    criterions = [CCCLoss(),
-                  CCCLoss()]
+    criterions = [RMSELoss(),
+                  RMSELoss()]
     # create LR scheduler
     lr_schedullers = {
         'Cyclic': torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5,
@@ -221,29 +224,24 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         optimizer.param_groups[0]['lr'] = config.LR_MIN_WARMUP
 
     # evaluation aprams
-    best_val_CCC = 0
+    best_val_RMSE = np.inf
     evaluation_metrics = {'MSE_val_arousal': mean_squared_error,
                             'MAE_val_arousal': mean_absolute_error,
-                            'CCC_val_arousal': ConcordanceCorrCoef,
                             'MSE_val_valence': mean_squared_error,
                           'MAE_val_valence': mean_absolute_error,
-                            'CCC_val_valence': ConcordanceCorrCoef,
                           }
     # early stopping
     early_stopping_callback = TorchEarlyStopping(verbose=True, patience=config.EARLY_STOPPING_PATIENCE,
                                                  save_path=config.BEST_MODEL_SAVE_PATH,
-                                                 mode="max")
+                                                 mode="min")
 
     # train model
     for epoch in range(config.NUM_EPOCHS):
         print("Epoch: %i" % epoch)
         # train the model
         model.train()
-        #print('weights linear layer')
-        #model.print_weights()
         print('------------------------')
-        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=100,
-                                 accumulate_gradients=ACCUMULATE_GRADIENTS,
+        train_loss = train_epoch(model, train_generator, optimizer, criterions, device, print_step=50,
                                  warmup_lr_scheduller=lr_scheduller if config.LR_SCHEDULLER == 'Warmup_cyclic' else None)
         print("Train loss: %.10f" % train_loss)
 
@@ -251,19 +249,19 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         model.eval()
         print("Evaluation of the model on dev set.")
         val_metrics = evaluate_model(model, dev_generator, evaluation_metrics, device)
-        val_CCC_arousal = val_metrics['CCC_val_arousal']
-        val_CCC_valence = val_metrics['CCC_val_valence']
-        val_CCC = (val_CCC_arousal + val_CCC_valence) / 2
+        val_RMSE_arousal = val_metrics['MSE_val_arousal'] ** 0.5
+        val_RMSE_valence = val_metrics['MSE_val_valence'] ** 0.5
+        val_RMSE = (val_RMSE_arousal + val_RMSE_valence) / 2
 
         # update best val metrics got on validation set and log them using wandb
-        if val_CCC > best_val_CCC:
-            best_val_CCC = val_CCC
-            wandb.config.update({'best_val_CCC': best_val_CCC}, allow_val_change=True)
+        if val_RMSE > best_val_RMSE:
+            best_val_RMSE = val_RMSE
+            wandb.config.update({'best_val_RMSE': best_val_RMSE}, allow_val_change=True)
             # save best model
             if not os.path.exists(config.BEST_MODEL_SAVE_PATH):
                 os.makedirs(config.BEST_MODEL_SAVE_PATH)
             torch.save(model.state_dict(), os.path.join(config.BEST_MODEL_SAVE_PATH, 'best_model.pth'))
-        print("Development CCC:%f" % val_CCC)
+        print("Development RMSE (Arousal + Valence):%f" % val_RMSE)
 
         # log everything using wandb
         wandb.log({'epoch': epoch}, commit=False)
@@ -272,17 +270,17 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         wandb.log({'val_MAE_arousal': val_metrics['MAE_val_arousal']}, commit=False)
         wandb.log({'val_MSE_valence': val_metrics['MSE_val_valence']}, commit=False)
         wandb.log({'val_MAE_valence': val_metrics['MAE_val_valence']}, commit=False)
-        wandb.log({'val_CCC_arousal': val_CCC_arousal}, commit=False)
-        wandb.log({'val_CCC_valence': val_CCC_valence}, commit=False)
-        wandb.log({'val_CCC': val_CCC}, commit=False)
-        wandb.log({'train_loss_CCC': train_loss})
+        wandb.log({'val_RMSE_arousal': val_RMSE_arousal}, commit=False)
+        wandb.log({'val_RMSE_valence': val_RMSE_valence}, commit=False)
+        wandb.log({'val_RMSE': val_RMSE}, commit=False)
+        wandb.log({'train_loss': train_loss})
         # update LR if needed
         if config.LR_SCHEDULLER == 'ReduceLRonPlateau':
-            lr_scheduller.step(val_CCC)
+            lr_scheduller.step(val_RMSE)
         elif config.LR_SCHEDULLER == 'Cyclic':
             lr_scheduller.step()
         # check early stopping
-        early_stopping_result = early_stopping_callback(val_CCC, model)
+        early_stopping_result = early_stopping_callback(val_RMSE, model)
         if early_stopping_result:
             print("Early stopping")
             break
@@ -292,7 +290,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     torch.cuda.empty_cache()
 
 
-def main(window_size, stride, base_model_type, seq2seq_model_type, batch_size, accumulate_gradients):
+def main(window_size, stride, base_model_type, seq2one_model_type, batch_size):
     print("Start of the script....")
     # get data loaders
     train_generator, dev_generator, test_generator = get_data_loaders(window_size=int(window_size),
@@ -301,21 +299,20 @@ def main(window_size, stride, base_model_type, seq2seq_model_type, batch_size, a
                                                                                        batch_size=batch_size)
     # train the model
     train_model(train_generator=train_generator, dev_generator=dev_generator,
-                base_model_type=base_model_type, seq2seq_model_type = seq2seq_model_type,
-                BATCH_SIZE=batch_size, ACCUMULATE_GRADIENTS=accumulate_gradients)
+                base_model_type=base_model_type, seq2one_model_type = seq2one_model_type,
+                BATCH_SIZE=batch_size)
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog='Emotion Recognition model training',
-        epilog='Parameters: model_type, batch_size, accumulate_gradients')
+        epilog='Parameters: model_type, batch_size')
     parser.add_argument('--window_size', type=float, required=True)
     parser.add_argument('--stride', type=float, required=True)
     parser.add_argument('--base_model_type', type=str, required=True)
-    parser.add_argument('--seq2seq_model_type', type=str, required=True)
+    parser.add_argument('--seq2one_model_type', type=str, required=True)
     parser.add_argument('--batch_size', type=int, required=True)
-    parser.add_argument('--accumulate_gradients', type=int, required=True)
     args = parser.parse_args()
     # turn passed args from int to bool
     print("Passed args: ", args)
@@ -324,19 +321,16 @@ if __name__ == "__main__":
         raise ValueError("model_type should be either EfficientNet-B1 or EfficientNet-B4. Got %s" % args.base_model_type)
     if args.batch_size < 1:
         raise ValueError("batch_size should be greater than 0")
-    if args.accumulate_gradients < 1:
-        raise ValueError("accumulate_gradients should be greater than 0")
     # convert args to bool
     window_size = args.window_size
     stride = args.stride
     base_model_type = args.base_model_type
-    seq2seq_model_type = args.seq2seq_model_type
+    seq2one_model_type = args.seq2one_model_type
     batch_size = args.batch_size
-    accumulate_gradients = args.accumulate_gradients
     # run main script with passed args
     main(window_size=window_size, stride=stride,
-         base_model_type = base_model_type, seq2seq_model_type = seq2seq_model_type,
-         batch_size=batch_size, accumulate_gradients=accumulate_gradients)
+         base_model_type = base_model_type, seq2one_model_type = seq2one_model_type,
+         batch_size=batch_size)
     # clear RAM
     gc.collect()
     torch.cuda.empty_cache()
