@@ -53,19 +53,27 @@ def evaluate_model(model:torch.nn.Module, data_generator:torch.utils.data.DataLo
     predictions_valence = []
     with torch.no_grad():
         for input, labels in data_generator:
+            # transform labels. We take the last value of each sequence as we need to predict only the last affective state
+            labels = labels[:, -1, :]
             input = input.float()
             input = input.to(device)
             # Forward pass
             output = model(input)
             # separate outputs on arousal valence
-            output_arousal = output[:, :, 0].squeeze().cpu().numpy()
-            output_valence = output[:, :, 1].squeeze().cpu().numpy()
+            output_arousal = output[:, 0].squeeze().cpu().numpy()
+            output_valence = output[:, 1].squeeze().cpu().numpy()
+            if len(output_arousal.shape) == 0:
+                output_arousal = np.expand_dims(output_arousal, axis=0)
+                output_valence = np.expand_dims(output_valence, axis=0)
             # Save predictions
             predictions_arousal.extend(output_arousal)
             predictions_valence.extend(output_valence)
             # separate ground truth
-            ground_truth_arousal = labels[:, :, 0].squeeze().cpu().numpy()
-            ground_truth_valence = labels[:, :, 1].squeeze().cpu().numpy()
+            ground_truth_arousal = labels[:, 0].squeeze().cpu().numpy()
+            ground_truth_valence = labels[:, 1].squeeze().cpu().numpy()
+            if len(ground_truth_arousal.shape) == 0:
+                ground_truth_arousal = np.expand_dims(ground_truth_arousal, axis=0)
+                ground_truth_valence = np.expand_dims(ground_truth_valence, axis=0)
             # Save ground truth
             ground_truths_arousal.extend(ground_truth_arousal)
             ground_truths_valence.extend(ground_truth_valence)
@@ -80,14 +88,6 @@ def evaluate_model(model:torch.nn.Module, data_generator:torch.utils.data.DataLo
         if 'MAE' in metric_name or 'MSE' in metric_name:
             # just calculate metric, it will work fine for mae and mse
             results[metric_name] = metric(ground_truth, predictions)
-        elif 'CCC' in metric_name:
-            # calculate metric for every instance
-            metric_values = [CCC(ground_truth[i], predictions[i]) for i in range(len(ground_truth))]
-            # check if there are some NaN values. If there are, set them to 0
-            metric_values = np.array(metric_values)
-            metric_values[np.isnan(metric_values)] = 0
-            # take average
-            results[metric_name] = metric_values.mean()
         else:
             raise ValueError(f"Unknown metric {metric_name}.")
     # Free memory
