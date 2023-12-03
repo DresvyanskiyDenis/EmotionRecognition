@@ -6,7 +6,6 @@ import pandas as pd
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import DeiTImageProcessor
 
 from decorators.common_decorators import timer
 from pytorch_utils.data_loaders.ImageDataLoader_new import ImageDataLoader
@@ -18,8 +17,6 @@ from pytorch_utils.data_loaders.pytorch_augmentations import pad_image_random_fa
 import training_config
 from pytorch_utils.models.input_preprocessing import resize_image_saving_aspect_ratio, EfficientNet_image_preprocessor, \
     resize_image_to_224_saving_aspect_ratio, preprocess_image_MobileNetV3, ViT_image_preprocessor
-
-DeiT_preprocessing_function = DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
 
 def split_static_dataset_into_train_dev_test(dataset:pd.DataFrame, percentages:Tuple[int, int, int], seed:int=42)->List[pd.DataFrame]:
@@ -80,6 +77,134 @@ def split_dataset_into_train_dev_test(filenames_labels:pd.DataFrame, percentages
 def transform_emo_categories_to_int(df:pd.DataFrame, emo_categories:dict)->pd.DataFrame:
     df['category'] = df['category'].apply(lambda x: emo_categories[x])
     return df
+
+def load_one_dataset(dataset_name:str, seed:int=42)->Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    path_to_AFEW_VA = r"/work/home/dsu/Datasets/AFEW-VA/AFEW-VA/AFEW-VA/preprocessed"
+    path_to_AffectNet = r"/work/home/dsu/Datasets/AffectNet/AffectNet/preprocessed"
+    path_to_RECOLA = r"/work/home/dsu/Datasets/RECOLA/preprocessed"
+    path_to_SEMAINE = r"/work/home/dsu/Datasets/SEMAINE/preprocessed"
+    path_to_SEWA = r"/work/home/dsu/Datasets/SEWA/preprocessed"
+    path_to_RAD_DB = r"/work/home/dsu/Datasets/RAF_DB/preprocessed"
+    path_to_EMOTIC = r"/work/home/dsu/Datasets/EMOTIC/cvpr_emotic/cvpr_emotic/preprocessed/"
+    path_to_ExpW = r"/work/home/dsu/Datasets/ExpW/ExpW/preprocessed"
+    path_to_FER_plus = r"/work/home/dsu/Datasets/FER_plus/images"
+    path_to_SAVEE = r"/work/home/dsu/Datasets/SAVEE/preprocessed"
+    percentages = (80, 10, 10)
+
+    if dataset_name == "AFEW-VA":
+        AFEW_VA = pd.read_csv(os.path.join(path_to_AFEW_VA,"labels.csv"))
+        AFEW_VA = AFEW_VA.rename(columns={"frame_num": "path"})
+        # transform valence and arousal values from [-10, 10] range to [-1, 1] range for AFEW-VA dataset
+        AFEW_VA['valence'] = AFEW_VA['valence'].apply(lambda x: x / 10.)
+        AFEW_VA['arousal'] = AFEW_VA['arousal'].apply(lambda x: x / 10.)
+        AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test = split_dataset_into_train_dev_test(AFEW_VA, percentages, seed=seed)
+        # add NaN values to 'category' column for the datasets that do not have it
+        AFEW_VA_train['category'], AFEW_VA_dev['category'], AFEW_VA_test['category'] = np.NaN, np.NaN, np.NaN
+        train, dev, test = AFEW_VA_train, AFEW_VA_dev, AFEW_VA_test
+    elif dataset_name == "AffectNet":
+        AffectNet_train = pd.read_csv(os.path.join(path_to_AffectNet, "train_labels.csv"))
+        AffectNet_train = transform_emo_categories_to_int(AffectNet_train, training_config.EMO_CATEGORIES)
+        AffectNet_dev = pd.read_csv(os.path.join(path_to_AffectNet, "dev_labels.csv"))
+        AffectNet_dev = transform_emo_categories_to_int(AffectNet_dev, training_config.EMO_CATEGORIES)
+        # change columns name of AffectNet from abs_path to path
+        AffectNet_train = AffectNet_train.rename(columns={"abs_path": "path"})
+        AffectNet_dev = AffectNet_dev.rename(columns={"abs_path": "path"})
+        # drop all images from AffectNet, which are mot jpg or png
+        allowed_extensions = ['jpg', 'png', 'JPG', 'jpeg', 'PNG', 'Jpeg', 'JPEG']
+        AffectNet_train = AffectNet_train[
+            AffectNet_train['path'].apply(lambda x: x.split('.')[-1] in allowed_extensions)]
+        AffectNet_dev = AffectNet_dev[AffectNet_dev['path'].apply(lambda x: x.split('.')[-1] in allowed_extensions)]
+        train, dev, test = AffectNet_train, AffectNet_dev, None
+    elif dataset_name == "RECOLA":
+        RECOLA = pd.read_csv(os.path.join(path_to_RECOLA, "preprocessed_labels.csv"))
+        RECOLA = RECOLA.rename(columns={"filename": "path"})
+        RECOLA = RECOLA.drop(columns=['timestamp'])
+        RECOLA_train, RECOLA_dev, RECOLA_test = split_dataset_into_train_dev_test(RECOLA, percentages, seed=seed)
+        RECOLA_train['category'], RECOLA_dev['category'], RECOLA_test['category'] = np.NaN, np.NaN, np.NaN
+        train, dev, test = RECOLA_train, RECOLA_dev, RECOLA_test
+    elif dataset_name == "SEMAINE":
+        SEMAINE = pd.read_csv(os.path.join(path_to_SEMAINE, "preprocessed_labels.csv"))
+        SEMAINE = SEMAINE.rename(columns={"filename": "path"})
+        SEMAINE = SEMAINE.drop(columns=['timestamp'])
+        SEMAINE_train, SEMAINE_dev, SEMAINE_test = split_dataset_into_train_dev_test(SEMAINE, percentages, seed=seed)
+        SEMAINE_train['category'], SEMAINE_dev['category'], SEMAINE_test['category'] = np.NaN, np.NaN, np.NaN
+        train, dev, test = SEMAINE_train, SEMAINE_dev, SEMAINE_test
+    elif dataset_name == "SEWA":
+        SEWA = pd.read_csv(os.path.join(path_to_SEWA, "preprocessed_labels.csv"))
+        SEWA = SEWA.rename(columns={"filename": "path"})
+        SEWA = SEWA.drop(columns=['timestamp'])
+        SEWA_train, SEWA_dev, SEWA_test = split_dataset_into_train_dev_test(SEWA, percentages, seed=seed)
+        SEWA_train['category'], SEWA_dev['category'], SEWA_test['category'] = np.NaN, np.NaN, np.NaN
+        train, dev, test = SEWA_train, SEWA_dev, SEWA_test
+    elif dataset_name == "FER_plus":
+        FER_plus = pd.read_csv(os.path.join(path_to_FER_plus, "labels.csv"))
+        FER_plus = FER_plus.rename(columns={"abs_path": "path"})
+        FER_plus_train = FER_plus
+        FER_plus_train = transform_emo_categories_to_int(FER_plus_train, training_config.EMO_CATEGORIES)
+        train, dev, test = FER_plus_train, None, None
+    elif dataset_name == "RAF_DB":
+        RAF_DB = pd.read_csv(os.path.join(path_to_RAD_DB, "labels.csv"))
+        RAF_DB = RAF_DB.rename(columns={"abs_path": "path"})
+        RAF_DB_train, RAF_DB_dev, RAF_DB_test = split_static_dataset_into_train_dev_test(RAF_DB, percentages, seed=seed)
+        RAF_DB_train, RAF_DB_dev, RAF_DB_test = transform_emo_categories_to_int(RAF_DB_train, training_config.EMO_CATEGORIES), \
+                                                transform_emo_categories_to_int(RAF_DB_dev, training_config.EMO_CATEGORIES), \
+                                                transform_emo_categories_to_int(RAF_DB_test, training_config.EMO_CATEGORIES)
+        train, dev, test = RAF_DB_train, RAF_DB_dev, RAF_DB_test
+    elif dataset_name == "EMOTIC":
+        EMOTIC_train = pd.read_csv(os.path.join(path_to_EMOTIC, "train_labels.csv"))
+        EMOTIC_dev = pd.read_csv(os.path.join(path_to_EMOTIC, "val_labels.csv"))
+        EMOTIC_test = pd.read_csv(os.path.join(path_to_EMOTIC, "test_labels.csv"))
+        EMOTIC_train = EMOTIC_train.rename(columns={"abs_path": "path"})
+        EMOTIC_dev = EMOTIC_dev.rename(columns={"abs_path": "path"})
+        EMOTIC_test = EMOTIC_test.rename(columns={"abs_path": "path"})
+        EMOTIC_train, EMOTIC_dev, EMOTIC_test = transform_emo_categories_to_int(EMOTIC_train, training_config.EMO_CATEGORIES), \
+                                                transform_emo_categories_to_int(EMOTIC_dev, training_config.EMO_CATEGORIES), \
+                                                transform_emo_categories_to_int(EMOTIC_test, training_config.EMO_CATEGORIES)
+        train, dev, test = EMOTIC_train, EMOTIC_dev, EMOTIC_test
+    elif dataset_name == "ExpW":
+        ExpW = pd.read_csv(os.path.join(path_to_ExpW, "labels.csv"))
+        ExpW = ExpW.rename(columns={"abs_path": "path"})
+        ExpW_train, ExpW_dev, ExpW_test = split_static_dataset_into_train_dev_test(ExpW, percentages, seed=seed)
+        ExpW_train, ExpW_dev, ExpW_test = transform_emo_categories_to_int(ExpW_train, training_config.EMO_CATEGORIES), \
+                                          transform_emo_categories_to_int(ExpW_dev, training_config.EMO_CATEGORIES), \
+                                          transform_emo_categories_to_int(ExpW_test, training_config.EMO_CATEGORIES)
+        train, dev, test = ExpW_train, ExpW_dev, ExpW_test
+    elif dataset_name == "SAVEE":
+        SAVEE = pd.read_csv(os.path.join(path_to_SAVEE, "labels.csv"))
+        SAVEE = SAVEE.rename(columns={"abs_path": "path"})
+        SAVEE_train, SAVEE_dev, SAVEE_test = split_dataset_into_train_dev_test(SAVEE, percentages=(50, 25, 25),
+                                                                               seed=seed)
+        SAVEE_train, SAVEE_dev, SAVEE_test = transform_emo_categories_to_int(SAVEE_train, training_config.EMO_CATEGORIES), \
+                                             transform_emo_categories_to_int(SAVEE_dev, training_config.EMO_CATEGORIES), \
+                                             transform_emo_categories_to_int(SAVEE_test, training_config.EMO_CATEGORIES)
+        SAVEE_train = SAVEE_train.drop(columns=['timestamp'])
+        SAVEE_dev = SAVEE_dev.drop(columns=['timestamp'])
+        SAVEE_test = SAVEE_test.drop(columns=['timestamp'])
+        train, dev, test = SAVEE_train, SAVEE_dev, SAVEE_test
+    else:
+        raise ValueError("Dataset name not recognized.")
+
+    # change external_hdd_1 to external_hdd_2 in paths for all datasets
+    train['path'] = train['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    dev['path'] = dev['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    test['path'] = test['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+    # again, change paths from "/media/external_hdd_2/Datasets" to  "/work/home/dsu/Datasets"
+    train['path'] = train['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    dev['path'] = dev['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    test['path'] = test['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+
+    return train, dev, test
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -212,10 +337,6 @@ def load_all_dataframes(seed:int=42) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Dat
 
     return (train, dev, test)
 
-
-def preprocess_image_DeiT(image:np.ndarray)->torch.Tensor:
-    image = DeiT_preprocessing_function(images=image, return_tensors="pt")['pixel_values']
-    return image
 
 def get_augmentation_function(probability:float)->Dict[Callable, float]:
     """
