@@ -200,13 +200,13 @@ def construct_data_loaders(train:Dict[str, pd.DataFrame], dev:Dict[str, pd.DataF
                  window_size=window_size, stride=stride,
                  consider_timestamps= True if type(window_size) == float else False,
                  preprocessing_functions= preprocessing_functions,
-                 augmentation_functions = augmentation_functions, shuffle=False)
+                 augmentation_functions = None, shuffle=False)
 
     test_data_loader = TemporalDataLoader(paths_with_labels=test, label_columns=labels_columns,
                  window_size=window_size, stride=stride,
                  consider_timestamps= True if type(window_size) == float else False,
                  preprocessing_functions= preprocessing_functions,
-                 augmentation_functions = augmentation_functions, shuffle=False)
+                 augmentation_functions = None, shuffle=False)
 
     train_dataloader = DataLoader(train_data_loader, batch_size=batch_size, num_workers=num_workers, drop_last=True,
                                   shuffle=True)
