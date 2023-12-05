@@ -80,8 +80,6 @@ def main():
     project_name = 'Emotion_Recognition_Seq2One'
     # set the output path
     output_path = '/work/home/dsu/emotion_recognition_project/weights_best_models/emotion_recognition_seq2one/'
-    # weights for the base model
-    path_to_weights_base_model = "/work/home/dsu/tmp/radiant_fog_160.pth"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # metrics
     metrics ={'MSE_val_arousal': mean_squared_error,
@@ -100,14 +98,11 @@ def main():
         sequence_length = info['sequence_length'].iloc[i]
         # create_model
         if model_type == "transformer":
-            model = Transformer_model_b1(path_to_weights_base_model=path_to_weights_base_model,
-                                         seq_len=sequence_length)
+            model = Transformer_model_b1(seq_len=sequence_length)
         elif model_type == "gru":
-            model = GRU_model_b1(path_to_weights_base_model=path_to_weights_base_model,
-                                 seq_len=sequence_length)
+            model = GRU_model_b1(seq_len=sequence_length)
         elif model_type == "simple_cnn":
-            model = Simple_CNN(path_to_weights_base_model=path_to_weights_base_model,
-                               seq_len=sequence_length)
+            model = Simple_CNN(seq_len=sequence_length)
         else:
             raise ValueError("Unknown model type: %s" % model_type)
         # load the model weights
