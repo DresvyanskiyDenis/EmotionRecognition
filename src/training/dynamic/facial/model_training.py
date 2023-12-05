@@ -176,17 +176,14 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     # create model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # get the sequence length
-    if config.base_model_type == "EfficientNet-B1":
-        if config.architecture == "transformer":
-            model = Transformer_model_b1(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
-        elif config.architecture == "gru":
-            model = GRU_model_b1(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
-        elif config.architecture == "simple_cnn":
-            model = Simple_CNN(path_to_weights_base_model=config.path_to_weights_base_model, seq_len=config.sequence_length)
-        else:
-            raise ValueError("Unknown model type: %s" % config.architecture)
+    if config.architecture == "transformer":
+        model = Transformer_model_b1(seq_len=config.sequence_length)
+    elif config.architecture == "gru":
+        model = GRU_model_b1(seq_len=config.sequence_length)
+    elif config.architecture == "simple_cnn":
+        model = Simple_CNN(seq_len=config.sequence_length)
     else:
-        raise ValueError("Unknown model type: %s" % config.base_model_type)
+        raise ValueError("Unknown model type: %s" % config.architecture)
     model = model.to(device)
 
     # define all model layers (params), which will be used by optimizer
@@ -199,7 +196,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
     optimizer = optimizers[config.OPTIMIZER](model_parameters, lr=config.LR_MAX_CYCLIC,
                                              weight_decay=config.WEIGHT_DECAY)
     # print model summary
-    print(summary(model, input_size=(config.BATCH_SIZE, seq_len, 3, 240, 240), verbose=0))
+    print(summary(model, input_size=(config.BATCH_SIZE, seq_len, 256), verbose=0))
     # Loss functions
     criterions = [RMSELoss(),
                   RMSELoss()]
