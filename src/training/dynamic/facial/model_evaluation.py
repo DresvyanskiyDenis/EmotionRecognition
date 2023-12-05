@@ -88,6 +88,8 @@ def evaluate_model(model:torch.nn.Module, data_generator:torch.utils.data.DataLo
         if 'MAE' in metric_name or 'MSE' in metric_name:
             # just calculate metric, it will work fine for mae and mse
             results[metric_name] = metric(ground_truth, predictions)
+        elif 'CCC' in metric_name:
+            results[metric_name] = metric(ground_truth, predictions)
         else:
             raise ValueError(f"Unknown metric {metric_name}.")
     # Free memory
