@@ -132,6 +132,15 @@ def load_all_datasets_embeddings() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataF
     test["valence"] = old_test["valence"]
     return (train, dev, test)
 
+def load_one_dataset(dataset:str)->Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    # to make it easier, we will load all datasets and just pick one of them
+    train, dev, test = load_all_datasets_embeddings()
+    train  = train[train["path"].str.contains(dataset)]
+    dev = dev[dev["path"].str.contains(dataset)]
+    test = test[test["path"].str.contains(dataset)]
+    return (train, dev, test)
+
+
 
 def split_dataset_into_train_dev_test(filenames_labels: pd.DataFrame, percentages: Tuple[int, int, int],
                                       seed: int = 42) -> List[pd.DataFrame]:
