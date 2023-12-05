@@ -185,14 +185,15 @@ def load_one_dataset(dataset_name:str, seed:int=42)->Tuple[pd.DataFrame, pd.Data
         raise ValueError("Dataset name not recognized.")
 
     # change external_hdd_1 to external_hdd_2 in paths for all datasets
+    # and then, again, change paths from "/media/external_hdd_2/Datasets" to  "/work/home/dsu/Datasets"
     train['path'] = train['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
-    dev['path'] = dev['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
-    test['path'] = test['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
-    # again, change paths from "/media/external_hdd_2/Datasets" to  "/work/home/dsu/Datasets"
     train['path'] = train['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
-    dev['path'] = dev['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
-    test['path'] = test['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
-
+    if dev is not None:
+        dev['path'] = dev['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+        dev['path'] = dev['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
+    if test is not None:
+        test['path'] = test['path'].apply(lambda x: x.replace("external_hdd_1", "external_hdd_2"))
+        test['path'] = test['path'].apply(lambda x: x.replace("/media/external_hdd_2/Datasets", "/work/home/dsu/Datasets"))
     return train, dev, test
 
 

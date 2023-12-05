@@ -52,9 +52,17 @@ def evaluate_model_on_one_dataset(model:torch.nn.Module, dataset_name:str, devic
     if dev_dataloader is not None:
         dev_metrics_arousal, dev_metrics_valence, dev_metrics_classification = evaluate_model(model, dev_dataloader, device,
                                                                                   print_metrics=False)
+        # change the metrics prefix from 'val_' to 'dev_'
+        dev_metrics_arousal = {key.replace("val_", "dev_"): value for key, value in dev_metrics_arousal.items()}
+        dev_metrics_valence = {key.replace("val_", "dev_"): value for key, value in dev_metrics_valence.items()}
+        dev_metrics_classification = {key.replace("val_", "dev_"): value for key, value in dev_metrics_classification.items()}
     if test_dataloader is not None:
         test_metrics_arousal, test_metrics_valence, test_metrics_classification = evaluate_model(model, test_dataloader, device,
                                                                                        print_metrics=False)
+        # change the metrics prefix from 'val_' to 'test_'
+        test_metrics_arousal = {key.replace("val_", "test_"): value for key, value in test_metrics_arousal.items()}
+        test_metrics_valence = {key.replace("val_", "test_"): value for key, value in test_metrics_valence.items()}
+        test_metrics_classification = {key.replace("val_", "test_"): value for key, value in test_metrics_classification.items()}
 
     return dev_metrics_arousal, dev_metrics_valence, dev_metrics_classification, \
            test_metrics_arousal, test_metrics_valence, test_metrics_classification
@@ -73,8 +81,8 @@ def create_and_load_model()->torch.nn.Module:
 
 
 def main():
-    results = pd.DataFrame(columns=["dataset", "dev_arousal_rmse", "dev_valence_rmse", "dev_recall",
-                                    "test_arousal_rmse", "test_valence_rmse", "test_recall"])
+    results = pd.DataFrame(columns=["dataset", "dev_arousal_rmse", "dev_valence_rmse", "dev_recall", "dev_accuracy",
+                                    "test_arousal_rmse", "test_valence_rmse", "test_recall", "test_accuracy"])
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = create_and_load_model()
     model.to(device)
@@ -85,21 +93,28 @@ def main():
     for dataset in datasets:
         dev_metrics_arousal, dev_metrics_valence, dev_metrics_classification, \
         test_metrics_arousal, test_metrics_valence, test_metrics_classification = evaluate_model_on_one_dataset(model, dataset, device)
-        results = results.append({"dataset": dataset,
-                                    "dev_arousal_rmse": dev_metrics_arousal["rmse"]**0.5, # because actually i calculate mse in the evaluate_model function
-                                    "dev_valence_rmse": dev_metrics_valence["rmse"]**0.5, # my bad
-                                    "dev_recall": dev_metrics_classification["recall"],
-                                    "test_arousal_rmse": test_metrics_arousal["rmse"]**0.5,
-                                    "test_valence_rmse": test_metrics_valence["rmse"]**0.5,
-                                    "test_recall": test_metrics_classification["recall"]}, ignore_index=True)
+        # append does not work anymore. Using concat instead
+        new_result = pd.DataFrame.from_dict({"dataset": dataset,
+                                    "dev_arousal_rmse": [dev_metrics_arousal["dev_arousal_rmse"]**0.5 if dev_metrics_arousal is not None else None],
+                                    "dev_valence_rmse": [dev_metrics_valence["dev_valence_rmse"]**0.5 if dev_metrics_valence is not None else None],
+                                    "dev_recall": [dev_metrics_classification["dev_recall_classification"] if dev_metrics_classification is not None else None],
+                                    "dev_accuracy": [dev_metrics_classification["dev_accuracy_classification"] if dev_metrics_classification is not None else None],
+                                    "test_arousal_rmse": [test_metrics_arousal["test_arousal_rmse"]**0.5 if test_metrics_arousal is not None else None],
+                                    "test_valence_rmse": [test_metrics_valence["test_valence_rmse"]**0.5 if test_metrics_valence is not None else None],
+                                    "test_recall": [test_metrics_classification["test_recall_classification"] if test_metrics_classification is not None else None],
+                                    "test_accuracy": [test_metrics_classification["test_accuracy_classification"] if test_metrics_classification is not None else None]})
+        results = pd.concat([results, new_result], ignore_index=True)
         # print the results as well
+        print("----------------------------------------------")
         print(f"Dataset: {dataset}")
-        print(f"Dev arousal rmse: {dev_metrics_arousal['rmse']**0.5}")
-        print(f"Dev valence rmse: {dev_metrics_valence['rmse']**0.5}")
-        print(f"Dev classification recall: {dev_metrics_classification['recall']}")
-        print(f"Test arousal rmse: {test_metrics_arousal['rmse']**0.5}")
-        print(f"Test valence rmse: {test_metrics_valence['rmse']**0.5}")
-        print(f"Test classification recall: {test_metrics_classification['recall']}")
+        print("Dev arousal RMSE: ", dev_metrics_arousal["dev_arousal_rmse"]**0.5 if dev_metrics_arousal is not None else None)
+        print("Dev valence RMSE: ", dev_metrics_valence["dev_valence_rmse"]**0.5 if dev_metrics_valence is not None else None)
+        print("Dev classification recall: ", dev_metrics_classification["dev_recall_classification"] if dev_metrics_classification is not None else None)
+        print("Dev classification accuracy: ", dev_metrics_classification["dev_accuracy_classification"] if dev_metrics_classification is not None else None)
+        print("Test arousal RMSE: ", test_metrics_arousal["test_arousal_rmse"]**0.5 if test_metrics_arousal is not None else None)
+        print("Test valence RMSE: ", test_metrics_valence["test_valence_rmse"]**0.5 if test_metrics_valence is not None else None)
+        print("Test classification recall: ", test_metrics_classification["test_recall_classification"] if test_metrics_classification is not None else None)
+        print("Test classification accuracy: ", test_metrics_classification["test_accuracy_classification"] if test_metrics_classification is not None else None)
         print("---------------------------------------------")
         print()
     results.to_csv(os.path.join(output_path, "separate_evaluation_results.csv"), index=False)
@@ -108,4 +123,4 @@ def main():
 
 
 if __name__=="__main__":
-    pass
+    main()
