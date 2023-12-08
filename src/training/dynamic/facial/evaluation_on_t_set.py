@@ -63,10 +63,10 @@ def get_info_and_download_models_weights_from_project(entity: str, project_name:
                              )
         # download the model weights
         final_output_path = os.path.join(output_path, ID)
-        run.file('best_model.pth').download(final_output_path, replace=True)
+        run.file('best_model.pt').download(final_output_path, replace=True)
         # move the file out of dir and rename file for convenience
-        os.rename(os.path.join(final_output_path, 'best_model.pth'),
-                  final_output_path + '.pth')
+        os.rename(os.path.join(final_output_path, 'best_model.pt'),
+                  final_output_path + '.pt')
         # delete the dir
         os.rmdir(final_output_path)
     return info
@@ -80,6 +80,8 @@ def main():
     project_name = 'Emotion_Recognition_Seq2One'
     # set the output path
     output_path = '/work/home/dsu/emotion_recognition_project/weights_best_models/emotion_recognition_seq2one/'
+    if not os.path.exists(output_path):
+        os.makedirs(output_path, exist_ok=True)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # metrics
     metrics ={'MSE_val_arousal': mean_squared_error,
@@ -106,7 +108,7 @@ def main():
         else:
             raise ValueError("Unknown model type: %s" % model_type)
         # load the model weights
-        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pth')))
+        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pt')))
         train_generator, dev_generator, test_generator = get_data_loaders(window_size=info['sequence_length'].iloc[i],
                                                                       stride=int(info['sequence_length'].iloc[i]*0.4),
                                                                       base_model_type="EfficientNet-B1",
@@ -125,7 +127,7 @@ def main():
         info.loc[i, list(dev_metrics.keys())] = list(dev_metrics.values())
         info.loc[i, list(test_metrics.keys())] = list(test_metrics.values())
         # save the info DataFrame
-        info.to_csv(os.path.join(output_path, 'info.csv'), index=False)
+        info.to_csv(os.path.join(output_path, 'evaluation_all_datasets.csv'), index=False)
 
 
 
