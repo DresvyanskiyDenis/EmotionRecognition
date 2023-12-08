@@ -251,7 +251,7 @@ def train_model(train_generator: torch.utils.data.DataLoader, dev_generator: tor
         val_RMSE = (val_RMSE_arousal + val_RMSE_valence) / 2
 
         # update best val metrics got on validation set and log them using wandb
-        if val_RMSE > best_val_RMSE:
+        if val_RMSE < best_val_RMSE:
             best_val_RMSE = val_RMSE
             wandb.config.update({'best_val_RMSE': best_val_RMSE}, allow_val_change=True)
             # save best model
