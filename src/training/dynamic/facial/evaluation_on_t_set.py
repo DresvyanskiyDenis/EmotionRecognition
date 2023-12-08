@@ -93,6 +93,18 @@ def main():
     info = get_info_and_download_models_weights_from_project(entity=entity,
                                                                 project_name=project_name,
                                                                 output_path=output_path)
+    # create dev and test columsn for the metrics
+    info['dev_RMSE_arousal'] = None
+    info['dev_RMSE_valence'] = None
+    info['dev_MAE_arousal'] = None
+    info['dev_MAE_valence'] = None
+    info['dev_RMSE'] = None
+    info['test_RMSE_arousal'] = None
+    info['test_RMSE_valence'] = None
+    info['test_MAE_arousal'] = None
+    info['test_MAE_valence'] = None
+    info['test_RMSE'] = None
+
 
     for i in tqdm(range(len(info))):
         print("Testing model %d / %s" % (i + 1, info['architecture'].iloc[i]))
@@ -121,11 +133,21 @@ def main():
         test_metrics = evaluate_model(model=model, data_generator=test_generator,
                                       metrics = metrics, device=device)
         # add to all metrics name the 'val_' or 'test_' prefix (depending on the data_generator)
-        dev_metrics = {key.replace('dev_', ''): value for key, value in dev_metrics.items()}
-        test_metrics = {key.replace('test_',''): value for key, value in test_metrics.items()}
+        dev_metrics = {key.replace('val_', 'dev_'): value for key, value in dev_metrics.items()}
+        test_metrics = {key.replace('val_','test_'): value for key, value in test_metrics.items()}
         # add the metrics to the info DataFrame
-        info.loc[i, list(dev_metrics.keys())] = list(dev_metrics.values())
-        info.loc[i, list(test_metrics.keys())] = list(test_metrics.values())
+        info['dev_RMSE_arousal'].iloc[i] = dev_metrics['MSE_dev_arousal']**0.5 # take the square root of the MSE
+        info['dev_RMSE_valence'].iloc[i] = dev_metrics['MSE_dev_valence']**0.5
+        info['dev_MAE_arousal'].iloc[i] = dev_metrics['MAE_dev_arousal']
+        info['dev_MAE_valence'].iloc[i] = dev_metrics['MAE_dev_valence']
+        info['dev_RMSE'].iloc[i] = (info['dev_RMSE_arousal'].iloc[i] + info['dev_RMSE_valence'].iloc[i])/2.
+        info['test_RMSE_arousal'].iloc[i] = test_metrics['MSE_test_arousal']**0.5
+        info['test_RMSE_valence'].iloc[i] = test_metrics['MSE_test_valence']**0.5
+        info['test_MAE_arousal'].iloc[i] = test_metrics['MAE_test_arousal']
+        info['test_MAE_valence'].iloc[i] = test_metrics['MAE_test_valence']
+        info['test_RMSE'].iloc[i] = (info['test_RMSE_arousal'].iloc[i] + info['test_RMSE_valence'].iloc[i])/2.
+
+
         # save the info DataFrame
         info.to_csv(os.path.join(output_path, 'evaluation_all_datasets.csv'), index=False)
 
