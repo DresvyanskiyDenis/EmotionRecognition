@@ -63,10 +63,10 @@ def get_info_and_download_models_weights_from_project(entity: str, project_name:
                              )
         # download the model weights
         final_output_path = os.path.join(output_path, ID)
-        run.file('best_model.pt').download(final_output_path, replace=True)
+        run.file('best_model.pth').download(final_output_path, replace=True)
         # move the file out of dir and rename file for convenience
-        os.rename(os.path.join(final_output_path, 'best_model.pt'),
-                  final_output_path + '.pt')
+        os.rename(os.path.join(final_output_path, 'best_model.pth'),
+                  final_output_path + '.pth')
         # delete the dir
         os.rmdir(final_output_path)
     return info
@@ -120,7 +120,7 @@ def main():
         else:
             raise ValueError("Unknown model type: %s" % model_type)
         # load the model weights
-        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pt')))
+        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pth')))
         train_generator, dev_generator, test_generator = get_data_loaders(window_size=info['sequence_length'].iloc[i],
                                                                       stride=int(info['sequence_length'].iloc[i]*0.4),
                                                                       base_model_type="EfficientNet-B1",

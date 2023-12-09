@@ -60,10 +60,10 @@ def get_info_and_download_models_weights_from_project(entity: str, project_name:
                          )
         # download the model weights
         final_output_path = os.path.join(output_path, ID)
-        run.file('best_model.pt').download(final_output_path, replace=True)
+        run.file('best_model.pth').download(final_output_path, replace=True)
         # move the file out of dir and rename file for convenience
-        os.rename(os.path.join(final_output_path, 'best_model.pt'),
-                  final_output_path + '.pt')
+        os.rename(os.path.join(final_output_path, 'best_model.pth'),
+                  final_output_path + '.pth')
         # delete the dir
         os.rmdir(final_output_path)
     return info
@@ -125,7 +125,7 @@ def main():
         else:
             raise ValueError("Unknown model type: %s" % model_type)
         # load the model weights
-        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pt')))
+        model.load_state_dict(torch.load(os.path.join(output_path, info['ID'].iloc[i] + '.pth')))
         model.eval()
         model.to(device)
 
