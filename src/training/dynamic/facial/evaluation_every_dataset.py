@@ -78,7 +78,7 @@ def get_data_loaders_for_separate_dataset(dataset_name: str, window_size: int, s
                                                                                window_size=window_size,
                                                                                stride=stride,
                                                                                preprocessing_functions=None,
-                                                                               batch_size=32,
+                                                                               batch_size=1,
                                                                                augmentation_functions=None)
     return (train_dataloader, dev_dataloader, test_dataloader)
 
@@ -108,8 +108,9 @@ def main():
     # ID', 'base_model_type', 'architecture','sequence_length', 'dataset', 'val_RMSE_arousal', 'val_RMSE_valence',
     # 'val_MAE_arousal', 'val_MAE_valence', 'RMSE_dev_arousal', 'RMSE_dev_valence', 'CCC_dev_arousal', 'CCC_dev_valence'
     result_info = pd.DataFrame(columns=['ID', 'base_model_type', 'architecture', 'sequence_length', 'dataset',
-                                        'val_RMSE_arousal', 'val_RMSE_valence', 'val_MAE_arousal', 'val_MAE_valence',
-                                        'RMSE_dev_arousal', 'RMSE_dev_valence', 'CCC_dev_arousal', 'CCC_dev_valence'])
+                                        'RMSE_dev_arousal', 'RMSE_dev_valence', 'MAE_dev_arousal', 'MAE_dev_valence',
+                                        'RMSE_test_arousal', 'RMSE_test_valence', 'MAE_test_arousal', 'MAE_test_valence',
+                                        'CCC_dev_arousal', 'CCC_dev_valence', 'CCC_test_arousal', 'CCC_test_valence'])
 
     for i in tqdm(range(len(info))):
         print("Testing model %d / %s" % (i + 1, info['architecture'].iloc[i]))
@@ -145,8 +146,8 @@ def main():
             n_test_metrics = evaluate_model(model=model, data_generator=n_test_generator,
                                             metrics=n_metrics, device=device)
             # add to all metrics name the 'val_' or 'test_' prefix (depending on the data_generator)
-            n_dev_metrics = {key.replace('dev_', ''): value for key, value in n_dev_metrics.items()}
-            n_test_metrics = {key.replace('test_', ''): value for key, value in n_test_metrics.items()}
+            n_dev_metrics = {key.replace('val_', 'dev_'): value for key, value in n_dev_metrics.items()}
+            n_test_metrics = {key.replace('val_', 'test_'): value for key, value in n_test_metrics.items()}
 
             # evaluate the model for getting CCC
             CCC_dev_metrics = evaluate_model(model=model, data_generator=ccc_dev_generator,
@@ -154,25 +155,27 @@ def main():
             CCC_test_metrics = evaluate_model(model=model, data_generator=ccc_test_generator,
                                               metrics=CCC_metrics, device=device)
             # add to all metrics name the 'val_' or 'test_' prefix (depending on the data_generator)
-            CCC_dev_metrics = {key.replace('dev_', ''): value for key, value in CCC_dev_metrics.items()}
-            CCC_test_metrics = {key.replace('test_', ''): value for key, value in CCC_test_metrics.items()}
+            CCC_dev_metrics = {key.replace('val_', 'dev_'): value for key, value in CCC_dev_metrics.items()}
+            CCC_test_metrics = {key.replace('val_', 'test_'): value for key, value in CCC_test_metrics.items()}
 
             # put everything in the result_info dataframe
-            new_row = pd.DataFrame.from_dict({'ID': info['ID'].iloc[i],
-                                              'base_model_type': info['base_model_type'].iloc[i],
-                                              'architecture': info['architecture'].iloc[i],
-                                              'sequence_length': info['sequence_length'].iloc[i],
-                                              'dataset': dataset_name,
-                                              'val_RMSE_arousal': n_dev_metrics['RMSE_arousal'],
-                                              'val_RMSE_valence': n_dev_metrics['RMSE_valence'],
-                                              'val_MAE_arousal': n_dev_metrics['MAE_arousal'],
-                                              'val_MAE_valence': n_dev_metrics['MAE_valence'],
-                                              'RMSE_dev_arousal': n_test_metrics['RMSE_arousal'],
-                                              'RMSE_dev_valence': n_test_metrics['RMSE_valence'],
-                                              'CCC_dev_arousal': CCC_dev_metrics['CCC_arousal'],
-                                              'CCC_dev_valence': CCC_dev_metrics['CCC_valence'],
-                                              'CCC_test_arousal': CCC_test_metrics['CCC_arousal'],
-                                              'CCC_test_valence': CCC_test_metrics['CCC_valence'],
+            new_row = pd.DataFrame.from_dict({'ID': [info['ID'].iloc[i]],
+                                              'base_model_type': [info['base_model_type'].iloc[i]],
+                                              'architecture': [info['architecture'].iloc[i]],
+                                              'sequence_length': [info['sequence_length'].iloc[i]],
+                                              'dataset': [dataset_name],
+                                              'RMSE_dev_arousal': [n_dev_metrics['MSE_dev_arousal']**0.5],
+                                              'RMSE_dev_valence': [n_dev_metrics['MSE_dev_valence']**0.5],
+                                              'MAE_dev_arousal': [n_dev_metrics['MAE_dev_arousal']],
+                                              'MAE_dev_valence': [n_dev_metrics['MAE_dev_valence']],
+                                              'RMSE_test_arousal': [n_test_metrics['MSE_test_arousal']**0.5],
+                                              'RMSE_test_valence': [n_test_metrics['MSE_test_valence']**0.5],
+                                              'MAE_test_arousal': [n_test_metrics['MAE_test_arousal']],
+                                              'MAE_test_valence': [n_test_metrics['MAE_test_valence']],
+                                              'CCC_dev_arousal': [CCC_dev_metrics['CCC_dev_arousal']],
+                                              'CCC_dev_valence': [CCC_dev_metrics['CCC_dev_valence']],
+                                              'CCC_test_arousal': [CCC_test_metrics['CCC_test_arousal']],
+                                              'CCC_test_valence': [CCC_test_metrics['CCC_test_valence']]
                                               })
             result_info = pd.concat([result_info, new_row], ignore_index=True)
 
